@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chainbrief — Decode Solana. Catch the Signal.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0B0E14;
+    --panel:#12161F;
+    --panel-2:#171C27;
+    --line:#232937;
+    --parchment:#EDE6D6;
+    --ink:#14161B;
+    --bone:#E8E6DF;
+    --bone-dim:#9AA0AC;
+    --amber:#FF7A1A;
+    --thread:#6C8CFF;
+    --green:#5FD9A0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--bg);
+    color:var(--bone);
+    font-family:'Source Serif 4', serif;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:var(--amber);color:var(--ink);}
+  .mono{font-family:'IBM Plex Mono', monospace;}
+  .display{font-family:'Space Grotesk', sans-serif;}
+  a{color:inherit;}
+
+  /* focus visibility */
+  a:focus-visible, button:focus-visible{outline:2px solid var(--amber); outline-offset:3px;}
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none !important; transition:none !important;}
+  }
+
+  /* ---------- TICKER ---------- */
+  .ticker-wrap{
+    background:var(--panel-2);
+    border-bottom:1px solid var(--line);
+    overflow:hidden;
+    white-space:nowrap;
+    position:sticky; top:0; z-index:50;
+  }
+  .ticker{
+    display:inline-block;
+    padding:9px 0;
+    animation:scroll-left 32s linear infinite;
+  }
+  .ticker span{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    letter-spacing:0.04em;
+    color:var(--bone-dim);
+    padding:0 28px;
+    border-right:1px solid var(--line);
+  }
+  .ticker span b{color:var(--amber); font-weight:600;}
+  @keyframes scroll-left{
+    from{transform:translateX(0);}
+    to{transform:translateX(-50%);}
+  }
+
+  /* ---------- NAV ---------- */
+  nav{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:20px 28px;
+    max-width:1120px; margin:0 auto;
+  }
+  .logo{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:700;
+    font-size:19px;
+    letter-spacing:-0.01em;
+  }
+  .logo span{color:var(--amber);}
+  .navlinks{display:flex; gap:26px; align-items:center;}
+  .navlinks a{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    color:var(--bone-dim);
+    text-decoration:none;
+  }
+  .navlinks a:hover{color:var(--bone);}
+  #connectBtn{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    letter-spacing:0.05em;
+    text-transform:uppercase;
+    background:transparent;
+    border:1px solid var(--amber);
+    color:var(--amber);
+    padding:9px 16px;
+    border-radius:2px;
+    cursor:pointer;
+    transition:background .15s ease, color .15s ease;
+  }
+  #connectBtn:hover{background:var(--amber); color:var(--ink);}
+  #connectBtn.connected{
+    background:var(--green); border-color:var(--green); color:var(--ink);
+  }
+
+  /* ---------- HERO ---------- */
+  header.hero{
+    max-width:1120px; margin:0 auto;
+    padding:64px 28px 56px;
+  }
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--amber);
+    margin-bottom:18px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow::before{
+    content:'';
+    width:7px;height:7px;border-radius:50%;
+    background:var(--green);
+    box-shadow:0 0 0 3px rgba(95,217,160,0.15);
+  }
+  h1{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:700;
+    font-size:clamp(34px, 6vw, 58px);
+    line-height:1.04;
+    letter-spacing:-0.02em;
+    max-width:16ch;
+  }
+  h1 em{
+    font-style:normal;
+    color:var(--amber);
+  }
+  .subhead{
+    font-family:'Source Serif 4', serif;
+    font-size:18px;
+    color:var(--bone-dim);
+    max-width:52ch;
+    margin-top:20px;
+  }
+  .hero-actions{
+    display:flex; gap:14px; margin-top:32px; flex-wrap:wrap;
+  }
+  .btn-primary, .btn-ghost{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:13px;
+    letter-spacing:0.03em;
+    padding:13px 22px;
+    border-radius:2px;
+    text-decoration:none;
+    display:inline-block;
+  }
+  .btn-primary{background:var(--amber); color:var(--ink); font-weight:600;}
+  .btn-ghost{border:1px solid var(--line); color:var(--bone);}
+
+  /* ---------- SECTION HEADERS ---------- */
+  .section{max-width:1120px; margin:0 auto; padding:64px 28px;}
+  .section-head{
+    display:flex; align-items:baseline; justify-content:space-between;
+    border-bottom:1px solid var(--line);
+    padding-bottom:16px;
+    margin-bottom:32px;
+    flex-wrap:wrap; gap:10px;
+  }
+  .section-tag{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color:var(--amber);
+  }
+  .section-title{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:600;
+    font-size:26px;
+    letter-spacing:-0.01em;
+  }
+  .section-note{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11.5px;
+    color:var(--bone-dim);
+  }
+
+  /* ---------- DECODE (explainer) cards ---------- */
+  .decode-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));
+    gap:18px;
+  }
+  .decode-card{
+    background:var(--parchment);
+    color:var(--ink);
+    border-radius:3px;
+    padding:22px 20px 20px;
+    position:relative;
+    border:1px solid #D8CFB8;
+  }
+  .clearance{
+    display:inline-block;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10px;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    padding:3px 8px;
+    border-radius:2px;
+    margin-bottom:14px;
+    font-weight:600;
+  }
+  .clearance.beginner{background:#DDEEE0; color:#1E5C34;}
+  .clearance.intermediate{background:#F4E3C7; color:#7A4E0E;}
+  .clearance.advanced{background:#F2D6D6; color:#7A1E1E;}
+  .decode-card h3{
+    font-family:'Space Grotesk', sans-serif;
+    font-size:19px;
+    font-weight:600;
+    margin-bottom:8px;
+    letter-spacing:-0.01em;
+  }
+  .decode-card p{
+    font-size:14.5px;
+    color:#3A3A34;
+    line-height:1.55;
+  }
+  .decode-card .protocol{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:#6B6754;
+    margin-top:14px;
+    padding-top:12px;
+    border-top:1px dashed #C9BFA3;
+    letter-spacing:0.03em;
+  }
+
+  /* ---------- SIGNAL (bounty) feed ---------- */
+  .signal-list{display:flex; flex-direction:column; gap:12px;}
+  .signal-row{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:3px;
+    padding:18px 20px;
+    display:grid;
+    grid-template-columns:1fr auto auto;
+    gap:16px;
+    align-items:center;
+  }
+  .signal-main h4{
+    font-family:'Space Grotesk', sans-serif;
+    font-size:16px;
+    font-weight:600;
+    margin-bottom:5px;
+  }
+  .signal-main .meta{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11.5px;
+    color:var(--bone-dim);
+  }
+  .signal-main .meta b{color:var(--thread); font-weight:500;}
+  .bars{display:flex; align-items:flex-end; gap:2px; height:20px;}
+  .bars i{
+    display:block; width:4px; background:var(--line); border-radius:1px;
+  }
+  .bars i:nth-child(1){height:6px;}
+  .bars i:nth-child(2){height:11px;}
+  .bars i:nth-child(3){height:16px;}
+  .bars i:nth-child(4){height:20px;}
+  .bars.strength-4 i{background:var(--amber);}
+  .bars.strength-3 i:nth-child(-n+3){background:var(--amber);}
+  .bars.strength-2 i:nth-child(-n+2){background:var(--amber);}
+  .prize{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:15px;
+    font-weight:600;
+    color:var(--green);
+    white-space:nowrap;
+  }
+  @media (max-width:640px){
+    .signal-row{grid-template-columns:1fr; align-items:flex-start;}
+    .bars{display:none;}
+  }
+
+  /* ---------- FOOTER ---------- */
+  footer{
+    border-top:1px solid var(--line);
+    padding:40px 28px 60px;
+  }
+  .footer-inner{
+    max-width:1120px; margin:0 auto;
+    display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;
+  }
+  .footer-inner p{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    color:var(--bone-dim);
+  }
+  .footer-links{display:flex; gap:18px;}
+  .footer-links a{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    color:var(--bone-dim);
+    text-decoration:none;
+  }
+  .footer-links a:hover{color:var(--amber);}
+
+  /* connect toast */
+  #toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--panel); border:1px solid var(--green); color:var(--bone);
+    font-family:'IBM Plex Mono', monospace; font-size:12.5px;
+    padding:12px 18px; border-radius:3px;
+    opacity:0; pointer-events:none;
+    transition:opacity .25s ease, transform .25s ease;
+    z-index:100;
+  }
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<div class="ticker-wrap">
+  <div class="ticker mono" id="tickerTrack"></div>
+</div>
+
+<nav>
+  <div class="logo">chain<span>brief</span></div>
+  <div class="navlinks">
+    <a href="#decode">Decode</a>
+    <a href="#signal">Signal</a>
+    <button id="connectBtn">Connect</button>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="eyebrow">live — solana ecosystem</div>
+  <h1>Dense docs, decoded. Live bounties, <em>signaled</em>.</h1>
+  <p class="subhead">Chainbrief turns Solana's densest protocol documentation into clear briefs, and surfaces the ecosystem's live bounties and grants before they close. Two feeds, one habit.</p>
+  <div class="hero-actions">
+    <a href="#signal" class="btn-primary">Catch the signal</a>
+    <a href="#decode" class="btn-ghost">Start decoding</a>
+  </div>
+</header>
+
+<section class="section" id="decode">
+  <div class="section-head">
+    <div>
+      <div class="section-tag">Track 01</div>
+      <div class="section-title">Decode</div>
+    </div>
+    <div class="section-note">protocol docs → plain briefs</div>
+  </div>
+  <div class="decode-grid" id="decodeGrid"></div>
+</section>
+
+<section class="section" id="signal">
+  <div class="section-head">
+    <div>
+      <div class="section-tag">Track 02</div>
+      <div class="section-title">Signal</div>
+    </div>
+    <div class="section-note">live bounties &amp; grants</div>
+  </div>
+  <div class="signal-list" id="signalList"></div>
+</section>
+
+<footer>
+  <div class="footer-inner">
+    <p>CHAINBRIEF — BUILT FOR THE TIUN × MICROLAUNCH HACKATHON</p>
+    <div class="footer-links">
+      <a href="#decode">Decode</a>
+      <a href="#signal">Signal</a>
+    </div>
+  </div>
+</footer>
+
+<div id="toast" class="mono">Connected — your signal feed is now saved.</div>
+
+<script src="https://cdn.tiun.io/sdk.js"></script>
+<script>
+  // ---- tiun auth integration ----
+  try{
+    tiun.init({ snippetId: 'chainbrief-demo', language: 'en' });
+  }catch(e){ /* SDK not reachable in preview sandbox — fails gracefully */ }
+
+  const connectBtn = document.getElementById('connectBtn');
+  const toast = document.getElementById('toast');
+  let connected = false;
+
+  connectBtn.addEventListener('click', () => {
+    try{
+      if (typeof tiun !== 'undefined' && tiun.start) tiun.start();
+    }catch(e){}
+    connected = !connected;
+    connectBtn.textContent = connected ? 'Connected' : 'Connect';
+    connectBtn.classList.toggle('connected', connected);
+    if(connected){
+      toast.classList.add('show');
+      setTimeout(()=>toast.classList.remove('show'), 2600);
+    }
+  });
+
+  // ---- content data ----
+  const decodeItems = [
+    {level:'intermediate', title:'Hylo: hyUSD & xSOL', protocol:'Hylo Protocol', body:'A stability-pool architecture pairing a yield-bearing stable asset with a leveraged SOL token — how the two absorb each other\u2019s risk.'},
+    {level:'advanced', title:'Liquidity vs Yield, Pt. 1', protocol:'Seasons', body:'Why deep liquidity and high yield are rarely the same thing on-chain, and how Seasons structures pools to avoid trading one for the other.'},
+    {level:'intermediate', title:'Peer-to-Peer Options', protocol:'Opta Finance', body:'A composable options protocol where positions are matched directly between peers instead of routed through a central AMM curve.'},
+    {level:'beginner', title:'Prediction Markets, On Track', protocol:'Velocity Markets', body:'How a motorsport prediction protocol prices outcomes in real time as a race unfolds, and settles the moment it ends.'},
+  ];
+
+  const signalItems = [
+    {title:'Build Solana-native plugins', sponsor:'Superteam Brasil', tag:'Backend · Blockchain', prize:'$1,500', deadline:'Aug 21', strength:4},
+    {title:'Ecosystem explainer thread series', sponsor:'Superteam Earn', tag:'Content · Research', prize:'$800', deadline:'Aug 24', strength:3},
+    {title:'MEV-resistant router benchmark', sponsor:'Solana Foundation', tag:'Backend · Research', prize:'$2,000', deadline:'Aug 29', strength:4},
+    {title:'Wallet-connect starter template', sponsor:'Superteam Nigeria', tag:'Frontend', prize:'$500', deadline:'Sep 02', strength:2},
+    {title:'Prediction-market UI kit', sponsor:'Velocity Markets', tag:'Design · Frontend', prize:'$650', deadline:'Sep 05', strength:2},
+  ];
+
+  const decodeGrid = document.getElementById('decodeGrid');
+  decodeItems.forEach(item=>{
+    const el = document.createElement('div');
+    el.className = 'decode-card';
+    el.innerHTML = `
+      <span class="clearance ${item.level}">${item.level}</span>
+      <h3>${item.title}</h3>
+      <p>${item.body}</p>
+      <div class="protocol">SOURCE — ${item.protocol}</div>
+    `;
+    decodeGrid.appendChild(el);
+  });
+
+  const signalList = document.getElementById('signalList');
+  signalItems.forEach(item=>{
+    const el = document.createElement('div');
+    el.className = 'signal-row';
+    el.innerHTML = `
+      <div class="signal-main">
+        <h4>${item.title}</h4>
+        <div class="meta"><b>${item.sponsor}</b> &nbsp;·&nbsp; ${item.tag} &nbsp;·&nbsp; closes ${item.deadline}</div>
+      </div>
+      <div class="bars strength-${item.strength}"><i></i><i></i><i></i><i></i></div>
+      <div class="prize">${item.prize}</div>
+    `;
+    signalList.appendChild(el);
+  });
+
+  // ---- ticker ----
+  const tickerData = signalItems.map(i => `<span>${i.sponsor} — <b>${i.prize}</b> — closes ${i.deadline}</span>`).join('');
+  document.getElementById('tickerTrack').innerHTML = tickerData + tickerData;
+</script>
+
+</body>
+</html>
