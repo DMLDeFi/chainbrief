@@ -1,5 +1,7 @@
 # OilHood Terminal — $OILHOOD on Robinhood Chain
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdmldefi%2Foilhood&env=NEXT_PUBLIC_LAUNCH_DATE,NEXT_PUBLIC_X_URL,NEXT_PUBLIC_TELEGRAM_URL&envDescription=All%20optional%20%E2%80%94%20see%20.env.example&project-name=oilhood)
+
 Marketing site + live **OilHood Terminal** for the $OILHOOD token on Robinhood Chain (chain ID 4663).
 
 - `/` – landing page: hero with live oil preview, story, features, tokenomics, how to buy on Pons, roadmap, FAQ, disclaimers.
@@ -18,7 +20,6 @@ Stack: Next.js 16 (App Router) · TypeScript · Tailwind CSS 4 · wagmi 2 + viem
 ## Run locally
 
 ```bash
-cd oilhood
 npm install
 cp .env.example .env.local   # fill in what you have
 npm run dev                  # http://localhost:3000
@@ -33,9 +34,10 @@ npm run dev                  # http://localhost:3000
    - `NEXT_PUBLIC_USO_TOKEN_ADDRESS`, `NEXT_PUBLIC_XOM_TOKEN_ADDRESS` – the tokenized stock contracts on Robinhood Chain. **Copy them from the official Robinhood / Blockscout explorer, never from a third party.**
    - `NEXT_PUBLIC_CREATOR_WALLET` – the wallet receiving Pons creator fees.
    - `NEXT_PUBLIC_X_URL`, `NEXT_PUBLIC_TELEGRAM_URL`, `NEXT_PUBLIC_SITE_URL`.
+   - `NEXT_PUBLIC_LAUNCH_DATE` – shows a countdown in the hero until the contract address is set.
    - Optional `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` for mobile wallets (free at cloud.reown.com).
 3. Edit `src/config/site.ts` for tokenomics, roadmap, FAQ, and add an entry to `feeLog` every time you spend/burn creator fees.
-4. Deploy on Vercel: import the repo, set **Root Directory = `oilhood`**, deploy.
+4. Deploy on Vercel: click the button above (or import the repo at vercel.com/new) and deploy. Env var changes need a redeploy.
 
 ## Data sources
 

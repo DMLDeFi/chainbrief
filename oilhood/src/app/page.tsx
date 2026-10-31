@@ -3,6 +3,7 @@ import { faq, roadmap, site, tokenomics } from "@/config/site";
 import { HeroLive } from "@/components/HeroLive";
 import { BuyButton } from "@/components/BuyButton";
 import { CopyAddress } from "@/components/CopyAddress";
+import { LaunchCountdown } from "@/components/LaunchCountdown";
 import { robinhood } from "@/lib/wagmi";
 
 const FEATURES = [
@@ -44,6 +45,7 @@ export default function Home() {
               <BuyButton />
               <Link href="/terminal" className="btn-ghost">Open Terminal</Link>
             </div>
+            <LaunchCountdown />
             <div className="max-w-xl"><CopyAddress /></div>
           </div>
           <HeroLive />

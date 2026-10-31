@@ -23,6 +23,10 @@ export const tokens = {
   xom: addr(process.env.NEXT_PUBLIC_XOM_TOKEN_ADDRESS),
 };
 
+const launch = process.env.NEXT_PUBLIC_LAUNCH_DATE ? new Date(process.env.NEXT_PUBLIC_LAUNCH_DATE) : null;
+/** Pre-launch countdown target (ISO date with timezone, e.g. 2026-11-05T18:00:00Z). */
+export const launchDate = launch && !isNaN(launch.getTime()) ? launch : null;
+
 export const creatorWallet = addr(process.env.NEXT_PUBLIC_CREATOR_WALLET);
 
 export const BURN_ADDRESSES: Address[] = [
