@@ -18,7 +18,6 @@
 
 use near_sdk::borsh::BorshSerialize;
 use near_sdk::json_types::U128;
-use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::serde_json::json;
 use near_sdk::store::{IterableMap, LookupMap, LookupSet};
 use near_sdk::{env, near, require, AccountId, BorshStorageKey, NearToken, PanicOnDefault, Promise};
@@ -58,8 +57,7 @@ pub struct Badge {
     pub awarded_at_ms: u64,
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(crate = "near_sdk::serde")]
+#[near(serializers = [json])]
 pub struct Config {
     pub owner_id: AccountId,
     pub game_authority: String,
