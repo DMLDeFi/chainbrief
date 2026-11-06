@@ -14,7 +14,8 @@ kill_timeout = 30
   DATA_DIR = "/data"
   COOKIE_SECURE = "true"
   TICK_MS = "2000"
-  ALLOW_FAST_FORWARD = "true"
+  # Fast-forward advances the shared world for every player, so it is off on the public server.
+  ALLOW_FAST_FORWARD = "false"
   NEAR_NETWORK_ID = "testnet"
   NEAR_RPC_URL = "https://rpc.testnet.near.org"
 

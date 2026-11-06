@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import type { PublicSnapshot } from '@mon/engine';
 import { api, type Me } from '@/lib/api';
-import { useAction } from '@/lib/hooks';
+import { useAction, useFastForwardEnabled } from '@/lib/hooks';
 import { toast } from '@/lib/store';
 import { gold } from '@/lib/format';
 import type { Selection } from '@/game/TownScene';
@@ -22,7 +22,8 @@ export function DemoGuide({ world, me, onOpen, onFocus, onMerchant, onClose }: {
   const { run, busy } = useAction();
   const wheat = world.markets.nearhaven.resources.wheat.price;
 
-  const steps: Step[] = [
+  const ffEnabled = useFastForwardEnabled();
+  const allSteps: Step[] = [
     {
       title: 'Welcome to Nearhaven',
       body: (w) => <>You are a street trader with <b>100 gold</b>. It is day {w.day}, {w.season}. {w.population} citizens eat, build and buy — and ten AI merchants run the economy around you. Nothing here is scripted.</>,
@@ -87,6 +88,8 @@ export function DemoGuide({ world, me, onOpen, onFocus, onMerchant, onClose }: {
       run: () => onOpen('wallet'),
     },
   ];
+  // Public servers disable fast-forward; skip that step rather than show an error.
+  const steps = ffEnabled === false ? allSteps.filter((x) => x.title !== 'Fast-forward time') : allSteps;
   const s = steps[i];
 
   return (

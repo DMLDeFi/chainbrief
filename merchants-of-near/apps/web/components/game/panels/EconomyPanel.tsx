@@ -44,7 +44,7 @@ export function EconomyPanel({ world, onClose, onMerchant }: { world: PublicSnap
           <div className="label">Daily closing price ÷ base price · Nearhaven</div>
           <div className="flex flex-wrap gap-1">{series.map((s) => <span key={s.name} className="flex items-center gap-1 text-[11px] capitalize"><span className="h-2 w-2 rounded-full" style={{ background: s.color }} />{s.name}</span>)}</div>
         </div>
-        {n >= 2 ? <LineChart series={series} labels={Array.from({ length: n }, (_, i) => `D${world.day - n + i + 1}`)} /> : <p className="py-8 text-center text-sm text-muted">Price history builds up day by day — use fast-forward to simulate a few days.</p>}
+        {n >= 2 ? <LineChart series={series} labels={Array.from({ length: n }, (_, i) => `D${world.day - n + i + 1}`)} /> : <p className="py-8 text-center text-sm text-muted">Price history builds up day by day as the town trades.</p>}
         <div className="mt-2 flex flex-wrap gap-1.5">
           {RESOURCES.map((r) => (
             <button key={r} onClick={() => toggle(r)} className={`flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] ${picked.includes(r) ? 'border-brass bg-brass/10 text-brass' : 'border-line text-muted'}`}><ResourceIcon r={r} size={13} />{RESOURCE_DEFS[r].label}</button>

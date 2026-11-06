@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { toast } from '@/lib/store';
 import { cap, gold, hourLabel, timeOfDay } from '@/lib/format';
 import { CountUp } from '../ui';
+import { useFastForwardEnabled } from '@/lib/hooks';
 import { Coin, IconFast, IconMute, IconSound, Logo, WeatherIcon } from '../icons';
 import { gameAudio, useAudio } from '@/lib/audio';
 import type { PanelId } from './GameShell';
@@ -15,6 +16,7 @@ export function Hud({ world, me, onOpen, connected }: { world: PublicSnapshot; m
   const p = me.player;
   const [ffOpen, setFfOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const ffEnabled = useFastForwardEnabled();
   const audio = useAudio();
   const soundOn = audio.settings.music || audio.settings.sfx;
   const next = p.nextLevel;
@@ -102,7 +104,7 @@ export function Hud({ world, me, onOpen, connected }: { world: PublicSnapshot; m
           {soundOn ? <IconSound /> : <IconMute />}
           {soundOn && !audio.unlocked && <span className="absolute -bottom-6 right-0 whitespace-nowrap rounded-md bg-walnut px-2 py-0.5 text-[10px] font-semibold text-brass animate-pulse-soft">tap for sound</span>}
         </button>
-        <div className="relative">
+        {ffEnabled && <div className="relative">
           <button disabled={busy} onClick={() => setFfOpen((v) => !v)} className="btn btn-gold h-[50px] px-4 max-sm:px-3" aria-haspopup="menu" aria-expanded={ffOpen}>
             <IconFast size={18} /> <span className="hidden sm:inline">{busy ? 'Simulating…' : 'Fast-forward'}</span>
           </button>
@@ -118,7 +120,7 @@ export function Hud({ world, me, onOpen, connected }: { world: PublicSnapshot; m
               <p className="px-2 pt-2 text-[11px] leading-snug text-muted">Advances the shared world: every merchant decides, produces and trades each simulated hour.</p>
             </div>
           )}
-        </div>
+        </div>}
       </div>
     </header>
   );

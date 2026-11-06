@@ -76,7 +76,7 @@ fly postgres attach <your-app-name>-db --app <your-app-name>
 ## Operational notes
 
 - **Shutdown and restarts:** Fly sends SIGTERM on deploys and restarts. The server saves the world snapshot before exiting (`kill_timeout = 30`), and a new machine resumes from it.
-- **Fast-forward:** it advances the shared world for every player. For a public server, set `ALLOW_FAST_FORWARD = "false"` under `[env]`.
+- **Fast-forward:** it advances the shared world for every player, so `fly.toml` turns it off (`ALLOW_FAST_FORWARD = "false"`), and the Fast-forward button and demo step are hidden. Set it to `"true"` only for a private demo server.
 - **Tick speed:** `TICK_MS` sets the speed (2000 ms is one in-game hour).
 - **Logs:** run `fly logs --app <your-app-name>`.
 - **Testing the container locally:**

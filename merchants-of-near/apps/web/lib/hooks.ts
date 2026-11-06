@@ -72,3 +72,16 @@ export function useFetch<T>(path: string | null, deps: unknown[] = []) {
   }, [load, ...deps]);
   return { data, error, reload: load };
 }
+
+let ffCache: boolean | null = null;
+/** Whether this server allows fast-forward (public servers usually disable it). Null while loading. */
+export function useFastForwardEnabled(): boolean | null {
+  const [on, setOn] = useState<boolean | null>(ffCache);
+  useEffect(() => {
+    if (ffCache !== null) return;
+    api<{ fastForward?: boolean }>('/catalog')
+      .then((c) => setOn((ffCache = c.fastForward !== false)))
+      .catch(() => setOn(null));
+  }, []);
+  return on;
+}
