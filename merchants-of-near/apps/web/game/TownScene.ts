@@ -358,7 +358,8 @@ export class TownScene extends Phaser.Scene {
       cam.setZoom(Phaser.Math.Clamp(cam.zoom * (dy > 0 ? 0.9 : 1.1), 0.45, 2.2));
     });
     if (this.input.keyboard) {
-      this.keys = this.input.keyboard.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,Q,E') as Record<string, Phaser.Input.Keyboard.Key>;
+      // enableCapture=false: never swallow keystrokes meant for the page's text fields.
+      this.keys = this.input.keyboard.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,Q,E', false) as Record<string, Phaser.Input.Keyboard.Key>;
     }
   }
 
@@ -532,7 +533,8 @@ export class TownScene extends Phaser.Scene {
   update(time: number, delta: number) {
     const dt = delta / 1000;
     const cam = this.cameras.main;
-    if (this.keys) {
+    const typing = typeof document !== 'undefined' && !!document.activeElement?.closest('input, textarea, select, [contenteditable="true"]');
+    if (this.keys && !typing) {
       const k = this.keys;
       const sp = (480 * dt) / cam.zoom;
       if (k.A.isDown || k.LEFT.isDown) cam.scrollX -= sp;
