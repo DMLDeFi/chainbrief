@@ -208,3 +208,6 @@ html, body {
   .title-rise, .title-rise-late, .ember, .gold-pulse { animation: none !important; }
   .ember { display: none; }
 }
+
+/* Cinema mode (?cinema=1): only the town and its vignette, for trailers and screenshots. */
+[data-cinema] > *:not(:first-child):not(.vignette) { display: none !important; }

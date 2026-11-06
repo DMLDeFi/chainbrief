@@ -95,6 +95,8 @@ export class TownScene extends Phaser.Scene {
   private zoomTarget = 1;
   private zoomAnchor: { sx: number; sy: number } | null = null;
   private cinematic = false;
+  /** Director overrides for trailers and screenshots (cinema mode only). */
+  private director: { hour: number | null; weather: string | null; season: string | null; scripted: boolean; labels: boolean } = { hour: null, weather: null, season: null, scripted: false, labels: true };
   private cineT = 0;
   private lastMerchantTrade = new Map<string, number>();
   private prevPrices: Record<string, number> = {};
@@ -119,6 +121,17 @@ export class TownScene extends Phaser.Scene {
   /** Slow autonomous camera tour (used behind the title screen). */
   setCinematic(on: boolean) {
     this.cinematic = on;
+  }
+
+  /**
+   * Cinema mode (`?cinema=1`): lets a capture script direct the town with the
+   * game's own renderer — script the camera, pick the hour, weather and season.
+   * It never touches the simulation; it only changes what this client draws.
+   */
+  direct(opts: Partial<{ hour: number | null; weather: string | null; season: string | null; scripted: boolean; labels: boolean }>) {
+    Object.assign(this.director, opts);
+    if (opts.season !== undefined) this.season = '';
+    if (this.snap) this.applySnapshot(this.snap);
   }
 
   private get motionOk() {
@@ -618,11 +631,12 @@ export class TownScene extends Phaser.Scene {
   }
 
   private applySnapshot(snap: PublicSnapshot) {
-    if (snap.season !== this.season) {
-      this.season = snap.season;
-      this.paintGround(snap.season);
-      for (const t of this.trees) if (t.oak) t.img.setTint(SEASON_OAK[snap.season]);
-      for (const t of this.trees) if (!t.oak) t.img.setTint(snap.season === 'winter' ? 0xdfe8ee : 0xffffff);
+    const season = this.director.season ?? snap.season;
+    if (season !== this.season) {
+      this.season = season;
+      this.paintGround(season);
+      for (const t of this.trees) if (t.oak) t.img.setTint(SEASON_OAK[season]);
+      for (const t of this.trees) if (!t.oak) t.img.setTint(season === 'winter' ? 0xdfe8ee : 0xffffff);
     }
     this.syncCitizens(snap.population);
     this.syncMerchants(snap);
@@ -770,7 +784,7 @@ export class TownScene extends Phaser.Scene {
   }
 
   private applyWeather(snap: PublicSnapshot) {
-    const weather = snap.weather;
+    const weather = this.director.weather ?? snap.weather;
     const s = this.cb.getSettings();
     const enabled = s.weather && !s.reducedMotion;
     const rainy = enabled && (weather === 'rain' || weather === 'storm');
@@ -782,7 +796,7 @@ export class TownScene extends Phaser.Scene {
     toggle(this.rain, rainy);
     toggle(this.splash, rainy);
     toggle(this.snow, enabled && weather === 'snow');
-    const leafCols = SEASON_LEAF[snap.season];
+    const leafCols = SEASON_LEAF[this.director.season ?? snap.season];
     if (leafCols) this.leaves.setParticleTint(leafCols[0]);
     toggle(this.leaves, enabled && !!leafCols && !rainy);
     const cloudy = weather === 'cloudy' || weather === 'rain' || weather === 'storm' || weather === 'snow';
@@ -948,8 +962,8 @@ export class TownScene extends Phaser.Scene {
   update(time: number, delta: number) {
     const dt = Math.min(0.1, delta / 1000);
     const cam = this.cameras.main;
-    this.updateCamera(dt);
-    this.adaptQuality(delta);
+    if (!this.director.scripted) this.updateCamera(dt);
+    if (!this.director.scripted) this.adaptQuality(delta);
     const motion = this.motionOk;
     let hour = 12;
     let night = 0;
@@ -957,12 +971,12 @@ export class TownScene extends Phaser.Scene {
     // Time of day, interpolated between server ticks, with sunrise/sunset grading.
     if (this.snap) {
       const frac = Math.min(1, (performance.now() - this.snapAt) / 2000);
-      hour = (this.snap.hour + frac) % 24;
+      hour = this.director.hour ?? (this.snap.hour + frac) % 24;
       night = this.nightFactor(hour);
       const dusk = hour >= 16 && hour < 21 ? 1 - Math.abs(hour - 18.5) / 2.5 : 0;
       const dawn = hour >= 4 && hour < 8 ? 1 - Math.abs(hour - 6) / 2 : 0;
       this.nightOverlay.setFillStyle(0x0c1633, 0.56 * night);
-      const w = this.snap.weather;
+      const w = this.director.weather ?? this.snap.weather;
       const gradeColor = w === 'storm' ? 0x8090a8 : dawn > dusk ? 0xffa58a : 0xff9a50;
       const heat = w === 'heatwave' ? 0.14 : 0;
       this.gradeOverlay.setFillStyle(w === 'heatwave' ? 0xffb060 : gradeColor, Math.max(dawn, dusk) * 0.32 + heat + (w === 'storm' ? 0.25 : w === 'rain' ? 0.12 : 0));
@@ -1008,7 +1022,8 @@ export class TownScene extends Phaser.Scene {
     }
     // Wind sways the trees (gentle, stronger in storms).
     if (motion && !this.lowQuality) {
-      const gust = this.snap?.weather === 'storm' ? 4 : this.snap?.weather === 'rain' ? 2.2 : 1.1;
+      const gw = this.director.weather ?? this.snap?.weather;
+      const gust = gw === 'storm' ? 4 : gw === 'rain' ? 2.2 : 1.1;
       for (const t of this.trees) t.img.setAngle(Math.sin(time / 900 + t.seed) * gust);
     }
 
@@ -1041,7 +1056,7 @@ export class TownScene extends Phaser.Scene {
       }
       npc.sprite.setDepth(npc.sprite.y + 1);
       npc.label?.setPosition(npc.sprite.x, npc.sprite.y - 40);
-      npc.label?.setAlpha(cam.zoom > 0.7 && !this.cinematic ? 0.92 : 0);
+      npc.label?.setAlpha(cam.zoom > 0.7 && !this.cinematic && this.director.labels ? 0.92 : 0);
     }
     for (const c of this.citizens) {
       const moving = this.stepNpc(c, dt, false, 1);

@@ -58,6 +58,8 @@ export const TownCanvas = forwardRef<TownHandle, Props>(function TownCanvas({ wo
         cinematic: !interactive,
       });
       scene.current = s;
+      // Cinema mode (?cinema=1): expose the scene so trailer/screenshot scripts can direct it.
+      if (new URLSearchParams(location.search).has('cinema')) (window as unknown as { __monTown?: TownScene }).__monTown = s;
       if (latest.current.world) s.setWorld(latest.current.world);
       if (!interactive) game.input.enabled = false;
     })();

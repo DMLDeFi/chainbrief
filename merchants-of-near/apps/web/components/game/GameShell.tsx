@@ -118,7 +118,7 @@ export function GameShell() {
   }
 
   return (
-    <main className="fixed inset-0 overflow-hidden bg-ink">
+    <main className="fixed inset-0 overflow-hidden bg-ink" data-cinema={params.has('cinema') ? '' : undefined}>
       <TownCanvas ref={town} world={world} playerId={me.user.id} onSelect={onSelect} settings={settings} />
       <div className="vignette absolute inset-0" />
 
