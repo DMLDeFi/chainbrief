@@ -33,10 +33,10 @@ The volume holds the world snapshot, accounts and ledger (the JSON store at `/da
 
 ## 3. Set secrets
 
-To use the testnet deployment from this project, take the values from `near-testnet-keys.txt` (section 1):
+To use the testnet deployment from this project, take the values from `near-testnet-keys-NEW.txt` (section 1):
 
 ```bash
-fly secrets set --app <your-app-name> NEAR_CONTRACT_ID=mon-game-190cff.testnet GAME_AUTHORITY_SECRET=<64-hex-secret>
+fly secrets set --app <your-app-name> NEAR_CONTRACT_ID=mon-game-0ebe9a.testnet GAME_AUTHORITY_SECRET=<64-hex-secret>
 ```
 
 Or deploy your own contract first with `node scripts/deploy-testnet.mjs` and use the values it writes into `.env`.

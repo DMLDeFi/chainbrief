@@ -76,17 +76,17 @@ Behind an HTTPS proxy, start Node with `NODE_USE_ENV_PROXY=1` (and `NODE_EXTRA_C
 
 ### Live testnet deployment (reference)
 
-Contract **`mon-game-190cff.testnet`** — [deploy + init transaction](https://testnet.nearblocks.io/txns/6NnPfPTP5s2tdk84zLZ1dzQWiCPzcHKJoBe1ZkZGNsf).
+Contract **`mon-game-0ebe9a.testnet`** — [deploy + init transaction](https://testnet.nearblocks.io/txns/7djKNX1JVUPB9dXsXr9bDWAG4pAzaciFW5rRRiCQ9FeC).
 
 `scripts/onchain-e2e.mts` ran the whole ownership loop against it with two fresh faucet accounts:
 
 1. Both players linked their wallets with NEP-413.
-2. Alice [claimed a deed](https://testnet.nearblocks.io/txns/623r1uf2QN1QQ9kUs7LRP6qgBFfrsiH1fUicgRatXyXZ) for her farm.
-3. She [listed it for 0.1 NEAR](https://testnet.nearblocks.io/txns/DCUDaTxyvNPpSoz11yT4wnH6XMR2wmAPCWheYQtMz8pm).
-4. Bob [bought it](https://testnet.nearblocks.io/txns/5DfjjjvT2AeJCqFFm3upXBZaKTx4z4nbVkMTwWvGR2Xu).
+2. Alice [claimed a deed](https://testnet.nearblocks.io/txns/Cb5Hr8BW8YuWZGcFeUyjrY3kvgmYaY2t8JUN4QPuq5ty) for her farm.
+3. She [listed it for 0.1 NEAR](https://testnet.nearblocks.io/txns/2t4DwWn4ytDCHeGJYijV7NEkbYpjaApCV27rJBfm5cBn).
+4. Bob [bought it](https://testnet.nearblocks.io/txns/F7yJ7fdPAZpKAyPVxs7hkLpYSzi5fQTcCd3EPKijvXwd).
 5. The server verified every transaction through RPC and moved the farm to Bob in-game.
 
-The certificate secret for this deployment is not in the repository. To issue deeds yourself, deploy your own instance with the script above, which takes a minute.
+This contract replaced an earlier one, `mon-game-190cff.testnet`, whose keys were exposed. That contract should no longer be used. The certificate secret for this deployment is not in the repository. To issue deeds yourself, deploy your own instance with the script above, which takes a minute.
 
 ### Deploy to Fly.io
 
