@@ -133,6 +133,21 @@ export async function buildApp(deps: AppDeps) {
     return { ok: true, user: { id: user.id, username: user.username } };
   });
 
+  // One-click guest profile for demos and judges. Credentials are random and never shown.
+  app.post('/api/auth/guest', { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const body = parse(z.object({ merchantName: z.string().min(3).max(20).optional() }), req.body ?? {}, reply);
+    if (!body) return;
+    const id = newId('u');
+    const suffix = id.slice(-4).replace(/[^a-zA-Z0-9]/g, 'x');
+    const name = body.merchantName ?? `Guest ${suffix}`;
+    const reg = game.ensurePlayer(id, name);
+    if (!reg.ok) return reply.code(400).send({ error: reg.error });
+    const user: UserRecord = { id, username: `guest_${id.slice(2, 14).replace(/[^a-zA-Z0-9_]/g, '_')}`, passwordHash: null, nearAccountId: null, createdAt: new Date().toISOString() };
+    await store.createUser(user);
+    await startSession(reply, id);
+    return { ok: true, user: { id, username: user.username } };
+  });
+
   app.post('/api/auth/logout', async (req, reply) => {
     const token = req.cookies[COOKIE];
     if (token) await store.deleteSession(hashToken(token));

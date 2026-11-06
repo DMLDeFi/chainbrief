@@ -154,7 +154,7 @@ export function updatePressure(m: MarketState, citizenBase: Partial<Record<Resou
     const s = m.supplyRate[r];
     const imbalance = (d - s) / (d + s + 0.5);
     const shortage = m.shortageRate[r] / ((citizenBase[r] ?? 0) + 0.2);
-    const target = clamp(1 + 0.25 * imbalance + 0.9 * shortage, ECONOMY.pressureMin, ECONOMY.pressureMax);
+    const target = clamp(1 + 0.2 * imbalance + 1.5 * shortage, ECONOMY.pressureMin, ECONOMY.pressureMax);
     m.pressure[r] += (target - m.pressure[r]) * ECONOMY.pressureSpeed;
 
     m.tickBuys[r] = 0;

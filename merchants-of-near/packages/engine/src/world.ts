@@ -66,11 +66,12 @@ function citizensConsume(world: WorldState): void {
     if (!CITIZEN_DEMAND[r]) continue;
     const def = RESOURCE_DEFS[r];
     const base = citizenBaseDemand(world, r) * demandFactor(world, r, seasonal);
-    let qty = base * Math.pow(def.basePrice / m.price[r], ECONOMY.citizenElasticity);
-    qty = Math.min(qty, Math.max(0, m.treasury) / m.price[r]);
+    const wanted = base * Math.pow(def.basePrice / m.price[r], ECONOMY.citizenElasticity);
+    const qty = Math.min(wanted, Math.max(0, m.treasury) / m.price[r]);
     const available = Math.max(0, m.stock[r] - 1);
     const take = Math.min(qty, available);
-    const unmet = Math.max(0, base - take); // unmet vs. *baseline* need drives shortage pressure
+    // Shortage means goods are missing from the shelves (not that households lack coin).
+    const unmet = Math.max(0, base - available);
     m.stock[r] = Math.round((m.stock[r] - take) * 100) / 100;
     m.tickConsumed[r] += take;
     m.tickShortage[r] += unmet > base * 0.25 ? unmet : 0;
@@ -174,19 +175,25 @@ function daily(world: WorldState): void {
  * merchant households spend part of their wealth in town.
  */
 function recirculate(world: WorldState): void {
+  // The guild keeps the exchange liquid so producers can always sell.
+  const town = world.markets.nearhaven;
+  if (town.treasury < 1500 && world.guildTreasury > 300) {
+    const x = money(Math.min(world.guildTreasury - 300, 1500 - town.treasury) * 0.5);
+    world.guildTreasury = money(world.guildTreasury - x);
+    town.treasury = money(town.treasury + x);
+  }
   if (world.guildTreasury > 1500) {
     const x = money((world.guildTreasury - 1500) * 0.1);
     world.guildTreasury = money(world.guildTreasury - x);
     world.markets.nearhaven.treasury = money(world.markets.nearhaven.treasury + x);
   }
   for (const m of Object.values(world.merchants)) {
-    if (m.role === 'banker' || m.status === 'bankrupt' || m.gold <= 400) continue;
+    if (m.role === 'banker' || m.status === 'bankrupt' || m.gold <= 300) continue;
     // Merchant households live off their profits: spending flows back to the townsfolk,
     // with a small guild due. Wealth therefore plateaus instead of draining the town.
-    const spend = money((m.gold - 400) * 0.04);
+    const spend = money((m.gold - 300) * 0.07);
     const due = money(spend * 0.15);
-    m.gold = money(m.gold - spend);
-    m.today.costs += spend;
+    m.gold = money(m.gold - spend); // owner drawings, not an operating cost
     world.markets.nearhaven.treasury = money(world.markets.nearhaven.treasury + spend - due);
     world.guildTreasury = money(world.guildTreasury + due);
   }

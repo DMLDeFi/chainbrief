@@ -65,7 +65,7 @@ describe('supply and demand', () => {
     const w = freshWorld(5);
     const m = w.markets.nearhaven;
     m.stock.bread = 2; // famine
-    for (const mer of Object.values(w.merchants)) if (mer.role === 'baker') mer.workers = 0;
+    for (const mer of Object.values(w.merchants)) if (mer.role === 'baker') { mer.workers = 0; mer.inventory = {}; }
     const before = m.pressure.bread;
     advanceWorld(w, 24);
     expect(m.shortageRate.bread).toBeGreaterThan(0);

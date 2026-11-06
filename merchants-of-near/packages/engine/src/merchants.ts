@@ -360,6 +360,10 @@ function runTrader(world: WorldState, m: MerchantState, idx: number): void {
       m.routes[key] = money((m.routes[key] ?? 1) * 0.6 + (revenue / expected) * 0.4);
     }
     const profit = money(revenue - costBasis);
+    if (!Object.keys(cargo).length) {
+      logDecision(m, world.tick, `Returned to ${world.markets[dest].name}`, ['Travelled without cargo']);
+      return;
+    }
     remember(m, { tick: world.tick, kind: 'travel', qty: profit, note: `Arrived at ${world.markets[dest].name}; caravan profit ${fmt(profit)}g` });
     logDecision(m, world.tick, `Sold caravan in ${world.markets[dest].name}`, [`Revenue ${fmt(revenue)}g vs cost ${fmt(costBasis)}g`, `Profit ${fmt(profit)}g`]);
     pushFeed(world, { kind: 'travel', actor: m.id, market: dest, text: `${m.name} arrived in ${world.markets[dest].name} and sold cargo for a ${profit >= 0 ? 'profit' : 'loss'} of ${fmt(Math.abs(profit))}g.`, data: { profit }, severity: profit >= 0 ? 'good' : 'bad' });
