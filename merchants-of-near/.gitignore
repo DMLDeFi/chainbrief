@@ -9,3 +9,7 @@ contract/target
 apps/server/src/generated
 coverage
 *.tsbuildinfo
+
+# Local music (personal use only, never committed)
+apps/web/public/audio/*
+!apps/web/public/audio/README.md

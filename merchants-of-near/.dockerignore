@@ -7,3 +7,5 @@ contract/target
 **/.env.local
 apps/server/src/generated
 *.tsbuildinfo
+apps/web/public/audio/*
+!apps/web/public/audio/README.md

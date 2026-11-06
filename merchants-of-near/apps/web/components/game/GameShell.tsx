@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useGame } from '@/lib/store';
 import { useSettings } from '@/lib/hooks';
+import { gameAudio } from '@/lib/audio';
 import type { Selection } from '@/game/TownScene';
 import { TownCanvas, type TownHandle } from '../TownCanvas';
 import { IconBag, IconChart, IconCrown, IconGear, IconHouse, IconMedal, IconPeople, IconScale, IconScroll, IconWallet, IconPlus, IconMinus } from '../icons';
@@ -50,6 +51,28 @@ export function GameShell() {
   useEffect(() => {
     if (meLoaded && !me) router.replace(`/register?next=${encodeURIComponent(`/play${demo ? '?demo=1' : ''}`)}`);
   }, [meLoaded, me, router, demo]);
+
+  // Soundtrack follows the world: time of day, season, weather and active events.
+  useEffect(() => gameAudio.init(), []);
+  useEffect(() => {
+    if (world) gameAudio.setMood({ hour: world.hour, season: world.season, weather: world.weather, tension: world.events.length > 0 });
+  }, [world]);
+  const lastEvent = useRef<number>(-1);
+  useEffect(() => {
+    const ev = feed.filter((f) => f.kind === 'event' && f.severity === 'bad').at(-1);
+    if (!ev) return;
+    if (lastEvent.current !== -1 && ev.id > lastEvent.current) gameAudio.bell();
+    lastEvent.current = ev.id;
+  }, [feed]);
+  const lastLevel = useRef<number | null>(null);
+  const achievements = me ? Object.keys(me.player.achievements).length : 0;
+  const lastAch = useRef<number | null>(null);
+  useEffect(() => {
+    if (!me) return;
+    if ((lastLevel.current !== null && me.player.level > lastLevel.current) || (lastAch.current !== null && achievements > lastAch.current)) gameAudio.fanfare();
+    lastLevel.current = me.player.level;
+    lastAch.current = achievements;
+  }, [me, achievements]);
 
   const open = useCallback((id: PanelId | null) => setPanel((p) => (p === id ? null : id)), []);
 

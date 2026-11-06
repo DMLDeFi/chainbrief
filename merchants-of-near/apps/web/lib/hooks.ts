@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { action as sendAction, api } from './api';
 import { refreshMe, toast } from './store';
+import { gameAudio } from './audio';
 
 /** Run a game action with busy state, toasts and a fresh player view afterwards. */
 export function useAction() {
@@ -10,10 +11,12 @@ export function useAction() {
     setBusy(true);
     try {
       const data = await sendAction<T>(payload);
+      gameAudio.coin();
       if (success) toast(typeof success === 'function' ? success(data) : success, 'good');
       await refreshMe();
       return data;
     } catch (e) {
+      gameAudio.thud();
       toast((e as Error).message, 'bad');
       return null;
     } finally {

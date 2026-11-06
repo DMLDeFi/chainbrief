@@ -1,3 +1,5 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
@@ -83,6 +85,17 @@ export async function buildApp(deps: AppDeps) {
   // ------------------------------------------------------------ public ---
   app.get('/api/health', async () => ({ ok: true, tick: game.world.tick, store: store.kind, llm: dialogue.enabled, near: near.publicConfig().certificatesEnabled }));
   app.get('/api/catalog', async () => ({ ...catalog, RESOURCE_DEFS, MARKET_DEFS, fastForward: config.allowFastForward, maxFastForwardDays: config.maxFastForwardDays }));
+  // Local music: audio files the player dropped into apps/web/public/audio/
+  // (gitignored, never committed). Only names with safe audio extensions are listed.
+  const audioDir = process.env.AUDIO_DIR ?? path.resolve(process.cwd(), '../web/public/audio');
+  app.get('/api/audio/tracks', async () => {
+    try {
+      const files = await fs.readdir(audioDir);
+      return files.filter((f) => /\.(mp3|m4a|aac|ogg|oga|wav|webm)$/i.test(f) && !f.startsWith('.')).sort().map((f) => `/audio/${encodeURIComponent(f)}`);
+    } catch {
+      return [];
+    }
+  });
   app.get('/api/world', async () => publicSnapshot(game.world, 0));
   app.get('/api/world/history', async () => {
     const out: Record<string, Record<string, number[]>> = {};

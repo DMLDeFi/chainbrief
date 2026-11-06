@@ -6,13 +6,16 @@ import type { Me } from '@/lib/api';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/store';
 import { cap, gold, hourLabel, timeOfDay } from '@/lib/format';
-import { Coin, IconFast, Logo, WeatherIcon } from '../icons';
+import { Coin, IconFast, IconMute, IconSound, Logo, WeatherIcon } from '../icons';
+import { gameAudio, useAudio } from '@/lib/audio';
 import type { PanelId } from './GameShell';
 
 export function Hud({ world, me, onOpen, connected }: { world: PublicSnapshot; me: Me; onOpen: (p: PanelId) => void; connected: boolean }) {
   const p = me.player;
   const [ffOpen, setFfOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const audio = useAudio();
+  const soundOn = audio.settings.music || audio.settings.sfx;
   const next = p.nextLevel;
   const xpPct = next ? Math.min(1, p.xp / next.xp) : 1;
 
@@ -88,6 +91,15 @@ export function Hud({ world, me, onOpen, connected }: { world: PublicSnapshot; m
             <div className="num display text-lg font-bold leading-none text-brass-bright">{gold(p.gold)}</div>
             <div className="num mt-1 whitespace-nowrap text-[10px] text-muted">net worth {gold(p.netWorth)}</div>
           </div>
+        </button>
+        <button
+          onClick={() => (audio.unlocked ? gameAudio.update(soundOn ? { music: false, sfx: false } : { music: true, sfx: true }) : void gameAudio.unlock())}
+          className="panel-glass relative grid h-[50px] w-[50px] place-items-center text-parchment-dim hover:text-brass-bright"
+          aria-label={soundOn ? 'Mute sound' : 'Turn sound on'}
+          title={soundOn ? 'Mute sound' : 'Turn sound on'}
+        >
+          {soundOn ? <IconSound /> : <IconMute />}
+          {soundOn && !audio.unlocked && <span className="absolute -bottom-6 right-0 whitespace-nowrap rounded-md bg-walnut px-2 py-0.5 text-[10px] font-semibold text-brass animate-pulse-soft">tap for sound</span>}
         </button>
         <div className="relative">
           <button disabled={busy} onClick={() => setFfOpen((v) => !v)} className="btn btn-gold h-[50px] px-4 max-sm:px-3" aria-haspopup="menu" aria-expanded={ffOpen}>

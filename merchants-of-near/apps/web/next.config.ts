@@ -4,6 +4,8 @@ const api = process.env.API_ORIGIN ?? 'http://localhost:4000';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Let phones and tablets on the same Wi-Fi open the dev server.
+  allowedDevOrigins: ['192.168.*.*', '10.*.*.*', '172.16.*.*', '*.local'],
   transpilePackages: ['@mon/engine'],
   // The browser talks to the game server through this same origin, so the
   // httpOnly session cookie never has to cross origins.

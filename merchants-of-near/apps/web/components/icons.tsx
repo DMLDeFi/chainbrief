@@ -59,6 +59,8 @@ export const IconPlus = line('M12 5v14M5 12h14');
 export const IconMinus = line('M5 12h14');
 export const IconSpark = line('M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6');
 export const IconChat = line('M5 5h14v10H9l-4 4V5Z');
+export const IconSound = line('M4 10v4h4l5 4V6L8 10H4Zm12-1.5a4.5 4.5 0 0 1 0 7M18.5 6a8 8 0 0 1 0 12');
+export const IconMute = line('M4 10v4h4l5 4V6L8 10H4Zm12 0 5 5m0-5-5 5');
 export const IconExternal = line('M14 4h6v6M20 4l-9 9M18 14v6H4V6h6');
 
 export function WeatherIcon({ w, size = 18 }: { w: string; size?: number }) {

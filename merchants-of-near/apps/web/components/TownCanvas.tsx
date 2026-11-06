@@ -46,6 +46,7 @@ export const TownCanvas = forwardRef<TownHandle, Props>(function TownCanvas({ wo
         render: { antialias: true, pixelArt: false, powerPreference: 'high-performance' },
         input: { mouse: { preventDefaultWheel: true } },
         banner: false,
+        audio: { noAudio: true }, // game audio is handled by lib/audio.ts
         scene: [],
       });
       game.scene.add('town', s, true, {
