@@ -1,4 +1,4 @@
-import { MARKETS, RESOURCE_DEFS, TRAVEL_TICKS, type MarketId, type Recipe, type Resource } from './config';
+import { ECONOMY, MARKETS, RESOURCE_DEFS, TRAVEL_TICKS, type MarketId, type Recipe, type Resource } from './config';
 import type { MemoryItem, MerchantRole, MerchantState, Result, WorldState } from './types';
 import { addInv, clamp, dayOf, fail, fmt, money, ok, pct, pushFeed } from './internal';
 import { maxAffordable, quoteBuy, quoteSell, settleOnMarket, supplyLevel, type TradeQuote } from './market';
@@ -79,7 +79,7 @@ export function remember(m: MerchantState, item: MemoryItem): void {
 export function merchantTrade(world: WorldState, m: MerchantState, side: 'buy' | 'sell', r: Resource, qty: number, marketId: MarketId = m.location, why = ''): TradeQuote | null {
   if (qty < 1) return null;
   const market = world.markets[marketId];
-  const q = side === 'buy' ? quoteBuy(market, r, qty) : quoteSell(market, r, qty);
+  const q = side === 'buy' ? quoteBuy(market, r, qty) : quoteSell(market, r, qty, ECONOMY.playerSellReserve);
   if (!q.ok) return null;
   if (side === 'buy' && q.data.total > m.gold) return null;
   if (side === 'sell' && (m.inventory[r] ?? 0) < qty) return null;
@@ -220,10 +220,10 @@ function sellOutputs(world: WorldState, m: MerchantState, spec: RoleSpec, output
     let ask = Math.max(m.ask[r] ?? market.price[r], floor * 0.85);
     let chunk = Math.min(60, Math.max(1, Math.ceil(have * (0.25 + 0.5 * (1 - m.personality.patience)))));
     // Shrink the order until the exchange can pay for it and it doesn't crash the price below cost.
-    let q = quoteSell(market, r, chunk);
+    let q = quoteSell(market, r, chunk, ECONOMY.playerSellReserve);
     while (chunk > 1 && (!q.ok || q.data.priceAfter < floor * 0.9)) {
       chunk = Math.floor(chunk / 2);
-      q = quoteSell(market, r, chunk);
+      q = quoteSell(market, r, chunk, ECONOMY.playerSellReserve);
     }
     if (!q.ok) continue;
     const distressed = m.gold < wagesDue;
@@ -324,7 +324,7 @@ export function findOpportunity(world: WorldState, from: MarketId, budget: numbe
     for (const q of [qty, Math.ceil(qty * 0.66), Math.ceil(qty * 0.4), Math.ceil(qty * 0.2)]) {
       if (q < 3) continue;
       const buy = quoteBuy(a, r, q);
-      const sell = quoteSell(b, r, q);
+      const sell = quoteSell(b, r, q, ECONOMY.playerSellReserve);
       if (!buy.ok || !sell.ok) continue;
       const routeKey = `${from}>${to}:${r}`;
       const learnedAdj = learned[routeKey] ?? 1; // memory of realised vs expected

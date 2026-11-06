@@ -67,6 +67,11 @@ export const WEATHERS = ['clear', 'cloudy', 'rain', 'storm', 'snow', 'heatwave']
 export type Weather = (typeof WEATHERS)[number];
 
 export const ECONOMY = {
+  /**
+   * Coin the exchange holds back from AI merchants and automated business sales,
+   * so a player can always sell by hand even when merchants have flooded the market.
+   */
+  playerSellReserve: 200,
   /** Bounds on price relative to base price. */
   minPriceFactor: 0.25,
   maxPriceFactor: 8,

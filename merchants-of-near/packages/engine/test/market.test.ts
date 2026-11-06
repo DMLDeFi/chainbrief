@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { quoteBuy, quoteSell, unitPrice, playerTrade, RESOURCE_DEFS, settleOnMarket, advanceWorld } from '../src/index';
+import { quoteBuy, quoteSell, unitPrice, playerTrade, RESOURCE_DEFS, settleOnMarket, advanceWorld, ECONOMY, merchantTrade } from '../src/index';
 import { freshWorld, totalGold, withPlayer } from './helpers';
 
 describe('price discovery', () => {
@@ -144,5 +144,22 @@ describe('player trading', () => {
     }
     expect(totalGold(world)).toBeCloseTo(before, 1);
     expect(player.gold).toBeLessThan(100); // fees were paid
+  });
+});
+
+describe('player liquidity', () => {
+  it('keeps a coin reserve that AI merchants cannot drain, so players can always sell', () => {
+    const { world: w, player } = withPlayer();
+    const m = w.markets.nearhaven;
+    const farmer = w.merchants.farmer;
+    m.treasury = ECONOMY.playerSellReserve + 15;
+    farmer.inventory.wheat = 500;
+    // A merchant may only use the coin above the reserve…
+    expect(quoteSell(m, 'wheat', 40, ECONOMY.playerSellReserve).ok).toBe(false);
+    expect(merchantTrade(w, farmer, 'sell', 'wheat', 40)).toBeNull();
+    // …while a player selling by hand can still be paid out of the reserve.
+    w.players[player.id].inventory.wheat = 10;
+    const r = playerTrade(w, player.id, { side: 'sell', resource: 'wheat', qty: 10 });
+    expect(r.ok).toBe(true);
   });
 });

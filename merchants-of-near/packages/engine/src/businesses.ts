@@ -1,4 +1,4 @@
-import { MARKETS, RESOURCE_DEFS, TRAVEL_TICKS, type Recipe, type Resource } from './config';
+import { ECONOMY, MARKETS, RESOURCE_DEFS, TRAVEL_TICKS, type Recipe, type Resource } from './config';
 import type { Business, BusinessKind, Result, WorldState } from './types';
 import { addInv, dayOf, fail, fmt, invTotal, money, newId, ok, pushFeed } from './internal';
 import { maxAffordable, quoteBuy, quoteSell, settleOnMarket } from './market';
@@ -212,7 +212,7 @@ export function collectFromBusiness(world: WorldState, playerId: string, busines
 function bizTrade(world: WorldState, b: Business, side: 'buy' | 'sell', r: Resource, qty: number, marketId: 'nearhaven' | 'aurora' = 'nearhaven'): number {
   const p = world.players[b.ownerId];
   const m = world.markets[marketId];
-  const q = side === 'buy' ? quoteBuy(m, r, qty) : quoteSell(m, r, qty);
+  const q = side === 'buy' ? quoteBuy(m, r, qty) : quoteSell(m, r, qty, ECONOMY.playerSellReserve);
   if (!q.ok) return 0;
   if (side === 'buy' && p.gold < q.data.total) return 0;
   if (side === 'sell' && (b.inventory[r] ?? 0) < qty) return 0;
@@ -319,7 +319,7 @@ export function runBusiness(world: WorldState, b: Business): void {
   if (b.policy.autoSell && world.tick % 2 === 0) {
     const units = Math.floor(b.inventory[out] ?? 0);
     if (units >= 2) {
-      const q = quoteSell(world.markets.nearhaven, out, units);
+      const q = quoteSell(world.markets.nearhaven, out, units, ECONOMY.playerSellReserve);
       if (q.ok && q.data.avgPrice >= b.policy.minSellPrice) bizTrade(world, b, 'sell', out, units);
     }
   }

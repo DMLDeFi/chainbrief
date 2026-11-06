@@ -89,13 +89,17 @@ export function quoteBuy(m: MarketState, r: Resource, qty: number): Result<Trade
   });
 }
 
-/** Proceeds of selling `qty` units right now. Unit i is priced at the stock level it creates. */
-export function quoteSell(m: MarketState, r: Resource, qty: number): Result<TradeQuote> {
+/**
+ * Proceeds of selling `qty` units right now. Unit i is priced at the stock level it creates.
+ * `reserve` is coin the exchange will not spend on this seller (automated sellers pass
+ * ECONOMY.playerSellReserve so players keep priority on the exchange's liquidity).
+ */
+export function quoteSell(m: MarketState, r: Resource, qty: number, reserve = 0): Result<TradeQuote> {
   if (!Number.isInteger(qty) || qty <= 0) return fail('Quantity must be a positive whole number');
   let gross = 0;
   for (let i = 0; i < qty; i++) gross += unitPrice(m, r, m.stock[r] + i + 1);
   // The exchange can only pay out coin it actually holds: gold is never created by selling.
-  if (gross > m.treasury) return fail(`${m.name} is short of coin (holds ${Math.floor(m.treasury)}g) and cannot buy that much`);
+  if (gross > m.treasury - reserve) return fail(`${m.name} is short of coin (holds ${Math.floor(m.treasury)}g) and cannot buy that much`);
   const fee = gross * m.fee;
   const total = money(gross - fee);
   return ok({
