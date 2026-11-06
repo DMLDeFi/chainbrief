@@ -46,6 +46,7 @@ export function SettingsPanel({ settings, onChange, onClose, onDemo }: { setting
             <option value="generated">Generated soundtrack (original)</option>
             <option value="tracks" disabled={!audio.tracks.length}>Your tracks ({audio.tracks.length} found)</option>
           </select>
+          <p className="mt-2 text-xs text-parchment-dim">Now playing: <b className="text-brass">{audio.nowPlaying}</b></p>
           <p className="mt-2 text-xs text-muted">Your tracks: put audio files in <code className="text-parchment-dim">apps/web/public/audio/</code> and reload. That folder is never committed.</p>
           {!audio.unlocked && <p className="mt-1 text-xs text-brass">Tap or click anywhere to enable sound (browsers require it).</p>}
         </div>

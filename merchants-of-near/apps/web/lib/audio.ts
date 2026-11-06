@@ -58,6 +58,11 @@ class GameAudio {
   private mood: Mood = { hour: 12, season: 'spring', weather: 'clear', tension: false };
   private trackEl?: HTMLAudioElement;
   private trackIndex = 0;
+  private trackSrc = '';
+  /** Tracks the browser could not decode or load; they are skipped. */
+  private failed = new Set<string>();
+  /** What is audible right now, for the Settings panel. */
+  nowPlaying = 'silent — click in the town to start';
   private listeners = new Set<() => void>();
   private started = false;
 
@@ -152,23 +157,35 @@ class GameAudio {
     this.mood = m;
   }
 
+  get playableTracks() {
+    return this.tracks.filter((t) => !this.failed.has(t));
+  }
   get usingTracks() {
-    return this.settings.source === 'tracks' || (this.settings.source === 'auto' && this.tracks.length > 0);
+    const n = this.playableTracks.length;
+    return n > 0 && (this.settings.source === 'tracks' || this.settings.source === 'auto');
+  }
+  private setNowPlaying(label: string) {
+    if (label !== this.nowPlaying) {
+      this.nowPlaying = label;
+      this.emit();
+    }
   }
 
   /** Start or stop whichever music source the settings call for. */
   private refresh() {
     if (!this.unlocked || typeof document === 'undefined' || document.hidden) return;
     const wantMusic = this.settings.music;
-    if (wantMusic && this.usingTracks && this.tracks.length) {
+    if (wantMusic && this.usingTracks) {
       this.stopGenerated();
       this.playTrack();
     } else if (wantMusic) {
       this.stopTrack();
       this.startGenerated();
+      this.setNowPlaying(this.failed.size ? 'generated soundtrack (your tracks could not be played)' : 'generated soundtrack');
     } else {
       this.stopTrack();
       this.stopGenerated();
+      this.setNowPlaying('music off');
     }
   }
 
@@ -179,19 +196,45 @@ class GameAudio {
 
   // ---------------------------------------------------------- local tracks
   private playTrack() {
+    const list = this.playableTracks;
+    if (!list.length) return this.refresh();
     if (!this.trackEl) {
       this.trackEl = new Audio();
       this.trackEl.preload = 'auto';
       this.trackEl.addEventListener('ended', () => {
-        this.trackIndex = (this.trackIndex + 1) % this.tracks.length;
-        this.trackEl!.src = this.tracks[this.trackIndex];
-        void this.trackEl!.play().catch(() => undefined);
+        this.trackIndex += 1;
+        this.playTrack();
+      });
+      // A file the browser can't load or decode: skip it, and fall back to the
+      // generated soundtrack if none are playable.
+      this.trackEl.addEventListener('error', () => {
+        console.warn(`[audio] could not play ${decodeURIComponent(this.trackSrc)} — skipping`);
+        this.failed.add(this.trackSrc);
+        this.trackSrc = '';
+        this.refresh();
       });
     }
-    const src = this.tracks[this.trackIndex % this.tracks.length];
-    if (!this.trackEl.src.endsWith(encodeURI(src))) this.trackEl.src = src;
+    const src = list[this.trackIndex % list.length];
+    if (this.trackSrc !== src) {
+      this.trackSrc = src;
+      this.trackEl.src = src;
+    }
     this.trackEl.volume = this.settings.volume;
-    void this.trackEl.play().catch(() => undefined);
+    this.trackEl.play().then(
+      () => this.setNowPlaying(`your track: ${decodeURIComponent(src.split('/').pop() ?? src)}`),
+      (e: DOMException) => {
+        if (e?.name === 'NotAllowedError') {
+          // Autoplay blocked: retry on the next tap or click.
+          this.setNowPlaying('waiting — click in the town to start');
+          window.addEventListener('pointerdown', () => this.refresh(), { once: true });
+        } else if (e?.name !== 'AbortError') {
+          console.warn(`[audio] could not play ${decodeURIComponent(src)}: ${e?.message ?? e}`);
+          this.failed.add(src);
+          this.trackSrc = '';
+          this.refresh();
+        }
+      },
+    );
   }
   private stopTrack() {
     this.trackEl?.pause();
@@ -449,9 +492,10 @@ export const gameAudio = new GameAudio();
 
 // ------------------------------------------------------------------ React hook
 
-let snapshot = { settings: gameAudio.settings, unlocked: gameAudio.unlocked, tracks: gameAudio.tracks };
+const snap = () => ({ settings: gameAudio.settings, unlocked: gameAudio.unlocked, tracks: gameAudio.tracks, playable: gameAudio.playableTracks.length, nowPlaying: gameAudio.nowPlaying });
+let snapshot = snap();
 gameAudio.subscribe(() => {
-  snapshot = { settings: gameAudio.settings, unlocked: gameAudio.unlocked, tracks: gameAudio.tracks };
+  snapshot = snap();
 });
 export function useAudio() {
   return useSyncExternalStore(
