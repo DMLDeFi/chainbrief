@@ -1,1 +1,9 @@
-{ "extends": "../../tsconfig.base.json", "include": ["src", "test", "prisma.config.ts"] }
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Resolve the shared engine from source, so the server runs even where npm
+    // did not create the workspace link in node_modules (seen on Windows).
+    "paths": { "@mon/engine": ["../../packages/engine/src/index.ts"] }
+  },
+  "include": ["src", "test", "prisma.config.ts"]
+}

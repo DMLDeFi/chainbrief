@@ -25,6 +25,9 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@mon/engine": [
+        "../../packages/engine/src/index.ts"
       ]
     }
   },
