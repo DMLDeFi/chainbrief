@@ -88,7 +88,14 @@ export async function buildApp(deps: AppDeps) {
   // Local music: audio files the player dropped into apps/web/public/audio/
   // (gitignored, never committed). Only names with safe audio extensions are listed.
   const audioDir = process.env.AUDIO_DIR ?? path.resolve(process.cwd(), '../web/public/audio');
-  app.get('/api/audio/tracks', async () => {
+  // Those files are the owner's personal music, so they are offered only to
+  // viewers on this machine or its local network, never to visitors arriving
+  // through a public tunnel or host.
+  app.addHook('onRequest', async (req, reply) => {
+    if (req.url.startsWith('/audio/') && !isLocalViewer(req)) return reply.code(404).send({ error: 'Not found' });
+  });
+  app.get('/api/audio/tracks', async (req) => {
+    if (!isLocalViewer(req)) return [];
     try {
       const files = await fs.readdir(audioDir);
       return files.filter((f) => /\.(mp3|m4a|aac|ogg|oga|wav|webm)$/i.test(f) && !f.startsWith('.')).sort().map((f) => `/audio/${encodeURIComponent(f)}`);
@@ -345,4 +352,26 @@ export async function buildApp(deps: AppDeps) {
   });
 
   return app;
+}
+
+const PRIVATE_IP = /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|::1$|fc|fd|fe80:|::ffff:(127|10|192\.168)\.)/i;
+const LOCAL_HOST = /^(localhost|127\.\d+\.\d+\.\d+|\[::1\]|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|[\w-]+\.local)$/i;
+
+/**
+ * True when a request comes from this machine or its LAN, and not through a
+ * tunnel, CDN or public host. Every hop (socket, X-Forwarded-For,
+ * CF-Connecting-IP) must be a private address and the Host must be a local
+ * name. Used only to keep the owner's personal music private, not for auth.
+ */
+export function isLocalViewer(req: { headers: Record<string, string | string[] | undefined>; socket?: { remoteAddress?: string } }) {
+  const h = (k: string) => {
+    const v = req.headers[k];
+    return Array.isArray(v) ? v.join(',') : v;
+  };
+  const ips = [req.socket?.remoteAddress, h('cf-connecting-ip'), ...(h('x-forwarded-for')?.split(',') ?? []), h('x-real-ip')]
+    .map((ip) => ip?.trim())
+    .filter((ip): ip is string => !!ip);
+  if (!ips.every((ip) => PRIVATE_IP.test(ip))) return false;
+  const host = (h('x-forwarded-host')?.split(',')[0] ?? h('host') ?? '').trim().replace(/:\d+$/, '');
+  return LOCAL_HOST.test(host);
 }

@@ -283,3 +283,20 @@ describe('on-chain ownership & settlement', () => {
     expect(ctx.game.world.businesses[biz.id].ownerId).toBe(b.id);
   });
 });
+
+describe('personal music stays private', () => {
+  it('lists and serves local tracks only to viewers on this machine or LAN', async () => {
+    const { isLocalViewer } = await import('../src/app');
+    expect(isLocalViewer({ headers: { host: 'localhost:3000' }, socket: { remoteAddress: '127.0.0.1' } })).toBe(true);
+    expect(isLocalViewer({ headers: { host: '192.168.101.3:3000', 'x-forwarded-for': '192.168.101.7' }, socket: { remoteAddress: '::1' } })).toBe(true);
+    // Cloudflare quick tunnel: arrives on loopback but carries the public host and the visitor's IP.
+    expect(isLocalViewer({ headers: { host: 'some-words.trycloudflare.com', 'cf-connecting-ip': '203.0.113.9', 'x-forwarded-for': '203.0.113.9' }, socket: { remoteAddress: '127.0.0.1' } })).toBe(false);
+    expect(isLocalViewer({ headers: { host: 'localhost:4000', 'x-forwarded-for': '203.0.113.9' }, socket: { remoteAddress: '127.0.0.1' } })).toBe(false);
+    expect(isLocalViewer({ headers: { host: 'mon.fly.dev' }, socket: { remoteAddress: '10.0.0.5' } })).toBe(false);
+
+    const remote = await ctx.app.inject({ method: 'GET', url: '/api/audio/tracks', headers: { host: 'x.trycloudflare.com', 'cf-connecting-ip': '203.0.113.9' } });
+    expect(remote.json()).toEqual([]);
+    const file = await ctx.app.inject({ method: 'GET', url: '/audio/song.mp3', headers: { host: 'x.trycloudflare.com', 'cf-connecting-ip': '203.0.113.9' } });
+    expect(file.statusCode).toBe(404);
+  });
+});

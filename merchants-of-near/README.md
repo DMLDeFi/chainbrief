@@ -107,7 +107,7 @@ One machine runs the game server and the Next.js app behind a single HTTPS origi
 | **Own it on NEAR** | Wallet login, business deeds, deed marketplace in NEAR, soulbound achievement badges. |
 | **Fast-forward** | Simulate 1–14 days instantly from the HUD. |
 
-**Music and sound:** the game ships with an original soundtrack composed live in the browser (Web Audio). Lute-like plucks, a drone and a frame drum change with the time of day, the season and active events. Sound effects cover trades, level-ups and new events. Sound starts on the first tap or click (a browser rule) and works on phones. To play your own music while testing locally, drop `.mp3`/`.m4a`/`.ogg`/`.wav` files into `apps/web/public/audio/`. That folder is gitignored and excluded from the Docker image, so personal tracks are never committed or deployed.
+**Music and sound:** the game ships with an original soundtrack composed live in the browser (Web Audio). Lute-like plucks, a drone and a frame drum change with the time of day, the season and active events. Sound effects cover trades, level-ups and new events. Sound starts on the first tap or click (a browser rule) and works on phones. To play your own music while testing locally, drop `.mp3`/`.m4a`/`.ogg`/`.wav` files into `apps/web/public/audio/`. That folder is gitignored and excluded from the Docker image, so personal tracks are never committed or deployed. The server also offers them only to viewers on the same machine or local network. Visitors arriving through a public tunnel or host hear the original soundtrack.
 
 Controls: drag or WASD/arrow keys to pan, wheel or Q/E to zoom, number keys 1–0 open panels, Esc closes.
 
