@@ -169,6 +169,8 @@ export interface Business {
   createdTick: number;
   /** On-chain deed token id, if minted. */
   deedTokenId?: string;
+  /** NEAR account that holds the deed on-chain (authoritative for deeded businesses). */
+  chainOwner?: string;
   plot: number;
   /** Trading company caravan state. */
   caravan?: { to: MarketId; arriveTick: number; cargo: Inventory; costBasis: number };

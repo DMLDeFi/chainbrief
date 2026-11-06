@@ -1,0 +1,219 @@
+import {
+  advanceWorld,
+  buyBusiness,
+  buyListing,
+  cancelListing,
+  claimMission,
+  collectFromBusiness,
+  createListing,
+  createWorld,
+  divestFromMerchant,
+  evaluateProgression,
+  expandWarehouse,
+  fireWorker,
+  hireWorker,
+  investInMerchant,
+  playerTrade,
+  proposeDeal,
+  publicSnapshot,
+  registerPlayer,
+  repayLoan,
+  requestLoan,
+  setBusinessPolicy,
+  stepWorld,
+  upgradeBusiness,
+  type Result,
+  type WorldState,
+} from '@mon/engine';
+import { z } from 'zod';
+import type { Store } from './store/types';
+
+const resource = z.enum(['wheat', 'bread', 'wood', 'iron', 'coal', 'stone', 'tools', 'livestock', 'fish', 'cloth', 'weapons']);
+const id = z.string().min(1).max(64);
+const qty = z.number().int().min(1).max(500);
+const gold = z.number().positive().max(100000);
+
+/** Every player action is validated against this schema before it reaches the engine. */
+export const ActionSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('trade'), side: z.enum(['buy', 'sell']), resource, qty, market: z.enum(['nearhaven', 'aurora']).optional(), limitPrice: z.number().positive().optional() }),
+  z.object({ type: z.literal('business.buy'), kind: z.enum(['farm', 'bakery', 'blacksmith', 'textile', 'warehouse', 'trading']) }),
+  z.object({ type: z.literal('business.hire'), businessId: id }),
+  z.object({ type: z.literal('business.fire'), businessId: id }),
+  z.object({ type: z.literal('business.upgrade'), businessId: id }),
+  z.object({ type: z.literal('business.collect'), businessId: id }),
+  z.object({
+    type: z.literal('business.policy'),
+    businessId: id,
+    policy: z.object({ autoBuyInputs: z.boolean().optional(), autoSell: z.boolean().optional(), minSellPrice: z.number().min(0).max(10000).optional(), product: resource.optional() }),
+  }),
+  z.object({ type: z.literal('warehouse.expand') }),
+  z.object({ type: z.literal('invest'), merchantId: id, amount: gold }),
+  z.object({ type: z.literal('divest'), merchantId: id }),
+  z.object({ type: z.literal('loan.request'), amount: gold }),
+  z.object({ type: z.literal('loan.repay'), loanId: id, amount: gold }),
+  z.object({ type: z.literal('listing.create'), resource, qty, unitPrice: gold }),
+  z.object({ type: z.literal('listing.cancel'), listingId: id }),
+  z.object({ type: z.literal('listing.buy'), listingId: id }),
+  z.object({ type: z.literal('deal'), merchantId: id, side: z.enum(['buy', 'sell']), resource, qty: z.number().int().min(1).max(200), unitPrice: gold }),
+  z.object({ type: z.literal('mission.claim'), missionId: id }),
+]);
+export type Action = z.infer<typeof ActionSchema>;
+
+type Listener = (msg: unknown) => void;
+
+/**
+ * GameService owns the single authoritative WorldState. All mutations (ticks,
+ * fast-forward, player actions) run synchronously on Node's single thread, so
+ * each one is atomic with respect to every other: no interleaving, no partial
+ * writes. The engine validates before it mutates, and the ledger it emits is
+ * flushed to the store after each mutation.
+ */
+export class GameService {
+  world!: WorldState;
+  private timer?: NodeJS.Timeout;
+  private listeners = new Set<Listener>();
+  private lastFeedId = 0;
+  private dirty = false;
+  private saving = false;
+
+  constructor(private store: Store, private opts: { seed: number; tickMs: number }) {}
+
+  async init(): Promise<void> {
+    this.world = (await this.store.loadWorld()) ?? createWorld(this.opts.seed);
+    this.world.ledger = [];
+    this.lastFeedId = this.world.feed.at(-1)?.id ?? 0;
+  }
+
+  start(): void {
+    if (this.timer) return;
+    this.timer = setInterval(() => this.tick(1), this.opts.tickMs);
+  }
+
+  async stop(): Promise<void> {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = undefined;
+    await this.persist(true);
+  }
+
+  subscribe(fn: Listener): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  private broadcast(): void {
+    const snap = publicSnapshot(this.world, this.lastFeedId);
+    this.lastFeedId = this.world.feed.at(-1)?.id ?? this.lastFeedId;
+    const msg = { type: 'snapshot', data: snap };
+    for (const l of this.listeners) l(msg);
+  }
+
+  tick(n: number): void {
+    if (n === 1) stepWorld(this.world);
+    else advanceWorld(this.world, n);
+    this.dirty = true;
+    this.broadcast();
+    void this.persist(this.world.tick % 24 === 0);
+  }
+
+  /** Fast-forward the shared world by whole days. */
+  fastForward(days: number): { fromTick: number; toTick: number; feed: number } {
+    const fromTick = this.world.tick;
+    const before = this.world.nextFeedId;
+    this.tick(days * 24);
+    return { fromTick, toTick: this.world.tick, feed: this.world.nextFeedId - before };
+  }
+
+  /** Persist ledger entries (always) and the world snapshot (when forced or periodically). */
+  async persist(snapshot = false): Promise<void> {
+    const entries = this.world.ledger.splice(0, this.world.ledger.length);
+    if (entries.length) await this.store.appendLedger(entries).catch((e) => console.error('ledger flush failed', e));
+    if ((snapshot || this.dirty) && !this.saving) {
+      if (!snapshot && this.world.tick % 12 !== 0) return;
+      this.saving = true;
+      try {
+        await this.store.saveWorld(this.world);
+        this.dirty = false;
+      } catch (e) {
+        console.error('world save failed', e);
+      } finally {
+        this.saving = false;
+      }
+    }
+  }
+
+  ensurePlayer(userId: string, name: string): Result<unknown> {
+    if (this.world.players[userId]) return { ok: true, data: this.world.players[userId] };
+    const r = registerPlayer(this.world, userId, name);
+    void this.persist(true);
+    return r;
+  }
+
+  /** Apply a validated player action. Only the authenticated user's own state can be targeted. */
+  apply(userId: string, action: Action): Result<unknown> {
+    const w = this.world;
+    const p = w.players[userId];
+    if (!p) return { ok: false, error: 'No merchant profile' };
+    let r: Result<unknown>;
+    switch (action.type) {
+      case 'trade':
+        r = playerTrade(w, userId, action);
+        break;
+      case 'business.buy':
+        r = buyBusiness(w, userId, action.kind);
+        break;
+      case 'business.hire':
+        r = hireWorker(w, userId, action.businessId);
+        break;
+      case 'business.fire':
+        r = fireWorker(w, userId, action.businessId);
+        break;
+      case 'business.upgrade':
+        r = upgradeBusiness(w, userId, action.businessId);
+        break;
+      case 'business.collect':
+        r = collectFromBusiness(w, userId, action.businessId);
+        break;
+      case 'business.policy':
+        r = setBusinessPolicy(w, userId, action.businessId, action.policy);
+        break;
+      case 'warehouse.expand':
+        r = expandWarehouse(w, userId);
+        break;
+      case 'invest':
+        r = investInMerchant(w, userId, action.merchantId, action.amount);
+        break;
+      case 'divest':
+        r = divestFromMerchant(w, userId, action.merchantId);
+        break;
+      case 'loan.request':
+        r = requestLoan(w, { kind: 'player', id: userId }, action.amount);
+        break;
+      case 'loan.repay':
+        r = repayLoan(w, userId, action.loanId, action.amount);
+        break;
+      case 'listing.create':
+        r = createListing(w, userId, action.resource, action.qty, action.unitPrice);
+        break;
+      case 'listing.cancel':
+        r = cancelListing(w, userId, action.listingId);
+        break;
+      case 'listing.buy':
+        r = buyListing(w, userId, action.listingId);
+        break;
+      case 'deal':
+        r = proposeDeal(w, userId, action);
+        break;
+      case 'mission.claim': {
+        const c = claimMission(w, p, action.missionId);
+        r = c.ok ? { ok: true, data: c.reward } : { ok: false, error: c.error ?? 'Failed' };
+        break;
+      }
+    }
+    if (r.ok) {
+      evaluateProgression(w, p);
+      this.dirty = true;
+      void this.persist(false);
+    }
+    return r;
+  }
+}

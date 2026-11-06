@@ -277,6 +277,8 @@ function runCaravan(world: WorldState, b: Business): void {
 export function runBusiness(world: WorldState, b: Business): void {
   const p = world.players[b.ownerId];
   if (!p) return;
+  // A deeded business only operates for the player whose wallet holds the deed.
+  if (b.chainOwner && p.nearAccountId !== b.chainOwner) return;
   const def = BUSINESS_DEFS[b.kind];
   if (b.kind === 'trading') return runCaravan(world, b);
   if (b.kind === 'warehouse') return;
