@@ -86,15 +86,16 @@ class GameAudio {
   init() {
     if (this.started || typeof window === 'undefined') return;
     this.started = true;
-    const unlock = () => {
-      void this.unlock();
-      window.removeEventListener('pointerdown', unlock);
-      window.removeEventListener('keydown', unlock);
-      window.removeEventListener('touchend', unlock);
+    // Mobile browsers (iOS Safari especially) only allow audio from certain
+    // gestures — a finger lifting (touchend/click), not touchstart/pointerdown.
+    // Listen to all of them and keep trying until the engine is really running.
+    const events = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'] as const;
+    const kick = () => {
+      void this.unlock().then(() => {
+        if (this.ctx?.state === 'running') events.forEach((e) => window.removeEventListener(e, kick, true));
+      });
     };
-    window.addEventListener('pointerdown', unlock);
-    window.addEventListener('keydown', unlock);
-    window.addEventListener('touchend', unlock);
+    events.forEach((e) => window.addEventListener(e, kick, true));
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) this.pauseAll();
       else this.refresh();
@@ -110,10 +111,22 @@ class GameAudio {
   }
 
   async unlock() {
-    if (this.unlocked) return;
+    if (this.ctx) {
+      // Created earlier but still suspended (gesture didn't count): try again now.
+      if (this.ctx.state !== 'running') {
+        this.playSilence();
+        await this.ctx.resume().catch(() => undefined);
+        if ((this.ctx.state as string) === 'running') {
+          this.refresh();
+          this.emit();
+        }
+      } else if (this.usingTracks && this.trackEl?.paused) this.refresh();
+      return;
+    }
     const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!Ctor) return;
     this.ctx = new Ctor();
+    this.playSilence();
     await this.ctx.resume().catch(() => undefined);
     const comp = this.ctx.createDynamicsCompressor();
     comp.connect(this.ctx.destination);
@@ -139,9 +152,20 @@ class GameAudio {
     delay.connect(lp).connect(fb).connect(delay);
     lp.connect(wet).connect(this.musicBus);
     this.echo = { delay, fb, wet };
-    this.unlocked = true;
+    this.unlocked = true; // engine built; sound flows once the context is running
     this.refresh();
     this.emit();
+  }
+
+  /** A one-sample silent buffer started inside the gesture wakes up iOS audio. */
+  private playSilence() {
+    if (!this.ctx) return;
+    try {
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.ctx.createBuffer(1, 1, 22050);
+      src.connect(this.ctx.destination);
+      src.start(0);
+    } catch { /* ignore */ }
   }
 
   update(p: Partial<AudioSettings>) {
@@ -226,7 +250,7 @@ class GameAudio {
         if (e?.name === 'NotAllowedError') {
           // Autoplay blocked: retry on the next tap or click.
           this.setNowPlaying('waiting — click in the town to start');
-          window.addEventListener('pointerdown', () => this.refresh(), { once: true });
+          for (const ev of ['touchend', 'click', 'keydown']) window.addEventListener(ev, () => this.refresh(), { once: true });
         } else if (e?.name !== 'AbortError') {
           console.warn(`[audio] could not play ${decodeURIComponent(src)}: ${e?.message ?? e}`);
           this.failed.add(src);
