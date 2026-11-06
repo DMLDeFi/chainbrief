@@ -36,7 +36,9 @@ function wsUrl() {
   const explicit = process.env.NEXT_PUBLIC_WS_URL;
   if (explicit) return explicit;
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${proto}://${location.hostname}:4000/ws`;
+  // Local dev runs Next on :3000 and the game server on :4000; in production
+  // the game server fronts the site, so the stream is on the same origin.
+  return location.port === '3000' ? `${proto}://${location.hostname}:4000/ws` : `${proto}://${location.host}/ws`;
 }
 
 export function connect() {

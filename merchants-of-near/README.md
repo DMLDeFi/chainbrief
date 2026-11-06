@@ -88,6 +88,10 @@ Contract **`mon-game-190cff.testnet`** — [deploy + init transaction](https://t
 
 The certificate secret for this deployment is not in the repository. To issue deeds yourself, deploy your own instance with the script above, which takes a minute.
 
+### Deploy to Fly.io
+
+One machine runs the game server and the Next.js app behind a single HTTPS origin. Follow [docs/DEPLOY_FLY.md](docs/DEPLOY_FLY.md): create the app and its volume, set the NEAR secrets, then run `fly deploy`.
+
 ---
 
 ## How to play

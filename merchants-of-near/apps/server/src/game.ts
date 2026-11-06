@@ -120,6 +120,7 @@ export class GameService {
     const fromTick = this.world.tick;
     const before = this.world.nextFeedId;
     this.tick(days * 24);
+    void this.persist(true); // a jump can skip the periodic save points
     return { fromTick, toTick: this.world.tick, feed: this.world.nextFeedId - before };
   }
 

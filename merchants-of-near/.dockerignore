@@ -1,0 +1,9 @@
+**/node_modules
+**/.next
+contract/target
+**/data
+.env
+**/.env
+**/.env.local
+apps/server/src/generated
+*.tsbuildinfo

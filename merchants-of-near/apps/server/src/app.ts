@@ -2,6 +2,7 @@ import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
+import httpProxy from '@fastify/http-proxy';
 import { z } from 'zod';
 import {
   catalog,
@@ -41,7 +42,8 @@ export async function buildApp(deps: AppDeps) {
   const { config, store, game, near, dialogue } = deps;
   const app = Fastify({ logger: process.env.NODE_ENV === 'test' ? false : { level: 'info' }, trustProxy: true, bodyLimit: 64 * 1024 });
   await app.register(cookie);
-  await app.register(rateLimit, { global: true, max: 600, timeWindow: '1 minute' });
+  // Page and asset requests proxied to Next.js are not API calls; only /api and /ws are limited.
+  await app.register(rateLimit, { global: true, max: 600, timeWindow: '1 minute', allowList: (req) => !req.url.startsWith('/api') && !req.url.startsWith('/ws') });
   await app.register(websocket);
 
   const actionBucket = new TokenBucket(15, 6); // burst 15, 6 actions/sec sustained
@@ -316,6 +318,12 @@ export async function buildApp(deps: AppDeps) {
     socket.on('close', off);
     socket.on('message', () => { /* the stream is read-only; actions go through the authenticated REST API */ });
   });
+
+  // Single-origin production deployment: everything that isn't /api or /ws is
+  // served by the Next.js app running alongside this process.
+  if (config.webOrigin) {
+    await app.register(httpProxy, { upstream: config.webOrigin, prefix: '/', websocket: false });
+  }
 
   app.setErrorHandler((err, _req, reply) => {
     if ((err as { statusCode?: number }).statusCode === 429) return reply.code(429).send({ error: 'Too many requests' });

@@ -10,6 +10,8 @@ export interface ServerConfig {
   port: number;
   host: string;
   tickMs: number;
+  /** In production the server also fronts the Next.js app (e.g. http://127.0.0.1:3000). */
+  webOrigin?: string;
   seed: number;
   databaseUrl?: string;
   dataDir: string;
@@ -35,6 +37,7 @@ export function loadConfig(env = process.env): ServerConfig {
     port: Number(env.PORT ?? 4000),
     host: env.HOST ?? '0.0.0.0',
     tickMs: Number(env.TICK_MS ?? 2000),
+    webOrigin: env.WEB_ORIGIN || undefined,
     seed: Number(env.WORLD_SEED ?? 20260101),
     databaseUrl: env.DATABASE_URL || undefined,
     dataDir: env.DATA_DIR ?? './data',
