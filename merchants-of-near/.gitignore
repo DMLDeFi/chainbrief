@@ -1,0 +1,10 @@
+node_modules
+.next
+dist
+*.log
+.env
+.env.local
+data/
+contract/target
+apps/server/src/generated
+coverage
