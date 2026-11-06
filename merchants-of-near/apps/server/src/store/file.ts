@@ -22,7 +22,22 @@ export class FileStore implements Store {
   private db: Db = { users: [], sessions: [], idem: {}, challenges: {}, txs: [], ledger: [] };
   private world: WorldState | null = null;
   private seq = 0;
+  /** Writes are serialised so concurrent flushes never race on the temp file. */
+  private chain: Promise<void> = Promise.resolve();
   constructor(private dir: string | null) {}
+
+  private write(file: string, data: string): Promise<void> {
+    const dir = this.dir;
+    if (!dir) return Promise.resolve();
+    this.chain = this.chain
+      .then(async () => {
+        const tmp = path.join(dir, `${file}.${process.pid}.tmp`);
+        await fs.writeFile(tmp, data);
+        await fs.rename(tmp, path.join(dir, file));
+      })
+      .catch((e) => console.error('file store write failed', e));
+    return this.chain;
+  }
 
   async init() {
     if (!this.dir) return;
@@ -35,19 +50,13 @@ export class FileStore implements Store {
       this.world = JSON.parse(await fs.readFile(path.join(this.dir, 'world.json'), 'utf8'));
     } catch { /* first run */ }
   }
-  private async flush() {
-    if (!this.dir) return;
-    const tmp = path.join(this.dir, 'db.json.tmp');
-    await fs.writeFile(tmp, JSON.stringify(this.db));
-    await fs.rename(tmp, path.join(this.dir, 'db.json'));
+  private flush() {
+    return this.write('db.json', JSON.stringify(this.db));
   }
   async loadWorld() { return this.world ? structuredClone(this.world) : null; }
   async saveWorld(w: WorldState) {
     this.world = structuredClone({ ...w, ledger: [] });
-    if (!this.dir) return;
-    const tmp = path.join(this.dir, 'world.json.tmp');
-    await fs.writeFile(tmp, JSON.stringify(this.world));
-    await fs.rename(tmp, path.join(this.dir, 'world.json'));
+    await this.write('world.json', JSON.stringify(this.world));
     await this.flush();
   }
   async appendLedger(entries: LedgerEntry[]) {

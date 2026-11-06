@@ -326,6 +326,8 @@ export class TownScene extends Phaser.Scene {
       alpha: { start: 0.95, end: 0.6 },
       emitting: false,
     }).setDepth(90010);
+    this.rain.stop();
+    this.snow.stop();
     for (let i = 0; i < 5; i++) {
       const p = iso(Math.random() * MAP, Math.random() * MAP);
       this.clouds.push(this.add.image(p.x, p.y, 'cloudshadow').setDepth(89999).setScale(2 + Math.random() * 2).setAlpha(0));
@@ -485,9 +487,13 @@ export class TownScene extends Phaser.Scene {
     const s = this.cb.getSettings();
     const enabled = s.weather && !s.reducedMotion;
     const rainy = enabled && (weather === 'rain' || weather === 'storm');
-    this.rain.emitting = rainy;
-    if (rainy) this.rain.frequency = weather === 'storm' ? 8 : 18;
-    this.snow.emitting = enabled && weather === 'snow';
+    if (rainy) {
+      this.rain.frequency = weather === 'storm' ? 8 : 18;
+      if (!this.rain.emitting) this.rain.start();
+    } else if (this.rain.emitting) this.rain.stop();
+    const snowy = enabled && weather === 'snow';
+    if (snowy && !this.snow.emitting) this.snow.start();
+    else if (!snowy && this.snow.emitting) this.snow.stop();
     const cloudy = weather === 'cloudy' || weather === 'rain' || weather === 'storm' || weather === 'snow';
     for (const c of this.clouds) this.tweens.add({ targets: c, alpha: cloudy ? 0.7 : 0.15, duration: 2000 });
   }

@@ -202,6 +202,14 @@ export function collectLoans(world: WorldState): void {
   const banker = getBanker(world);
   if (banker) {
     const d = recentDefaults(world);
+    const active = Object.values(world.loans).filter((l) => l.status === 'active');
+    const book = active.reduce((s, l) => s + l.outstanding, 0);
+    banker.decisions.push({
+      tick: world.tick,
+      action: `Reviewed the loan book: ${active.length} active loan${active.length === 1 ? '' : 's'}, ${fmt(book)}g outstanding`,
+      reasons: [`Vault holds ${fmt(banker.gold)}g`, `Risk appetite ${(banker.personality.risk * 100).toFixed(0)}`, `${d} default(s) in the last week`],
+    });
+    if (banker.decisions.length > 40) banker.decisions.shift();
     const before = banker.personality.risk;
     banker.personality.risk = clamp(d > 0 ? before - 0.03 * d : before + 0.01, 0.25, 0.6);
     if (Math.abs(banker.personality.risk - before) >= 0.02) {

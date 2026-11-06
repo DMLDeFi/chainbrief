@@ -8,3 +8,4 @@ data/
 contract/target
 apps/server/src/generated
 coverage
+*.tsbuildinfo

@@ -1,4 +1,8 @@
-import 'dotenv/config';
+import path from 'node:path';
+import dotenv from 'dotenv';
+
+// Read apps/server/.env first, then the monorepo root .env.
+dotenv.config({ path: [path.resolve(process.cwd(), '.env'), path.resolve(process.cwd(), '../../.env')], quiet: true });
 
 const bool = (v: string | undefined, d: boolean) => (v === undefined ? d : ['1', 'true', 'yes'].includes(v.toLowerCase()));
 

@@ -30,20 +30,20 @@ export function Hud({ world, me, onOpen, connected }: { world: PublicSnapshot; m
   };
 
   return (
-    <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-3">
+    <header className="pointer-events-none absolute inset-x-0 top-0 z-[35] flex items-start justify-between gap-2 p-3 max-sm:p-2">
       {/* Identity */}
       <div className="panel-glass pointer-events-auto flex items-center gap-3 px-3 py-2">
-        <Link href="/" aria-label="Home"><Logo size={34} /></Link>
+        <Link href="/" aria-label="Home" className="max-sm:hidden"><Logo size={34} /></Link>
         <button className="text-left" onClick={() => onOpen('achievements')}>
           <div className="flex items-center gap-2">
-            <span className="display text-sm font-bold">{p.name}</span>
-            <span className="rounded-md bg-brass/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brass">Lv {p.level} · {p.levelTitle}</span>
+            <span className="display max-w-[110px] truncate text-sm font-bold sm:max-w-none">{p.name}</span>
+            <span className="whitespace-nowrap rounded-md bg-brass/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brass">Lv {p.level}<span className="max-sm:hidden"> · {p.levelTitle}</span></span>
           </div>
           <div className="mt-1 flex items-center gap-2">
-            <div className="h-1.5 w-36 overflow-hidden rounded-full bg-black/50">
+            <div className="h-1.5 w-36 overflow-hidden rounded-full bg-black/50 max-sm:w-16">
               <div className="h-full rounded-full bg-gradient-to-r from-brass-deep to-brass-bright transition-[width] duration-700" style={{ width: `${xpPct * 100}%` }} />
             </div>
-            <span className="num text-[10px] text-muted">{p.xp}{next ? ` / ${next.xp}` : ''} XP</span>
+            <span className="num whitespace-nowrap text-[10px] text-muted">{p.xp}{next ? ` / ${next.xp}` : ''} XP</span>
           </div>
         </button>
       </div>
@@ -83,14 +83,14 @@ export function Hud({ world, me, onOpen, connected }: { world: PublicSnapshot; m
       {/* Wealth + fast-forward */}
       <div className="pointer-events-auto flex items-start gap-2">
         <button onClick={() => onOpen('inventory')} className="panel-glass flex items-center gap-3 px-3 py-2 text-left">
-          <Coin size={22} />
+          <Coin size={22} className="max-sm:hidden" />
           <div>
             <div className="num display text-lg font-bold leading-none text-brass-bright">{gold(p.gold)}</div>
-            <div className="num mt-1 text-[10px] text-muted">net worth {gold(p.netWorth)}</div>
+            <div className="num mt-1 whitespace-nowrap text-[10px] text-muted">net worth {gold(p.netWorth)}</div>
           </div>
         </button>
         <div className="relative">
-          <button disabled={busy} onClick={() => setFfOpen((v) => !v)} className="btn btn-gold h-[50px] px-4" aria-haspopup="menu" aria-expanded={ffOpen}>
+          <button disabled={busy} onClick={() => setFfOpen((v) => !v)} className="btn btn-gold h-[50px] px-4 max-sm:px-3" aria-haspopup="menu" aria-expanded={ffOpen}>
             <IconFast size={18} /> <span className="hidden sm:inline">{busy ? 'Simulating…' : 'Fast-forward'}</span>
           </button>
           {ffOpen && (

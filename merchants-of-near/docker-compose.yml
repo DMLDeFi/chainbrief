@@ -1,0 +1,16 @@
+# Optional PostgreSQL for persistence. `docker compose up -d`, then set
+# DATABASE_URL=postgresql://mon:mon@localhost:5432/merchants and run
+# `npm run db:push -w @mon/server`.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mon
+      POSTGRES_PASSWORD: mon
+      POSTGRES_DB: merchants
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:
