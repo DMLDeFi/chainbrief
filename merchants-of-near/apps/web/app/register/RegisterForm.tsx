@@ -9,8 +9,9 @@ import { Logo } from '@/components/icons';
 
 export function RegisterForm() {
   const router = useRouter();
-  const next = useSearchParams().get('next');
-  const [mode, setMode] = useState<'create' | 'login'>('create');
+  const params = useSearchParams();
+  const next = params.get('next');
+  const [mode, setMode] = useState<'create' | 'login'>(params.get('mode') === 'login' ? 'login' : 'create');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [merchantName, setMerchantName] = useState('');

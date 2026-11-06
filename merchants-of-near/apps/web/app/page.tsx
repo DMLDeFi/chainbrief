@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useGame } from '@/lib/store';
 import { RESOURCE_DEFS, RESOURCES } from '@/lib/catalog';
 import { gold } from '@/lib/format';
-import { TownCanvas } from '@/components/TownCanvas';
+import { TitleScreen } from '@/components/TitleScreen';
 import { Delta } from '@/components/ui';
 import { Logo, ResourceIcon } from '@/components/icons';
 
@@ -20,36 +20,11 @@ export default function Landing() {
   const m = world?.markets.nearhaven;
   return (
     <main className="relative">
-      {/* Hero */}
-      <section className="relative h-[92vh] min-h-[620px] overflow-hidden">
-        <TownCanvas world={world} playerId={null} interactive={false} className="absolute inset-0 opacity-90" />
-        <div className="absolute inset-0 bg-[radial-gradient(90%_70%_at_30%_45%,rgba(14,11,8,0.88),rgba(14,11,8,0.35)_60%,rgba(14,11,8,0.7))]" />
-        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-ink to-transparent" />
-        <nav className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-          <div className="flex items-center gap-3"><Logo size={38} /><span className="display text-lg font-bold tracking-wider">Merchants of NEAR</span></div>
-          <div className="flex items-center gap-2">
-            <Link href="#how" className="hidden px-3 text-sm text-parchment-dim hover:text-parchment sm:block">How it works</Link>
-            <Link href="#near" className="hidden px-3 text-sm text-parchment-dim hover:text-parchment sm:block">Why NEAR</Link>
-            <Link href="/register" className="btn btn-ghost px-4 py-2 text-sm">Sign in</Link>
-          </div>
-        </nav>
-        <div className="relative z-10 mx-auto flex h-[calc(100%-88px)] max-w-6xl flex-col justify-center px-6">
-          <div className="max-w-2xl animate-rise">
-            <span className="label text-brass">NEAR Hackathon 2026 · Economic strategy</span>
-            <h1 className="display mt-4 text-5xl font-bold leading-[1.05] sm:text-6xl">A living economy<br /><span className="text-brass-bright">run by AI merchants.</span></h1>
-            <p className="mt-5 max-w-xl text-lg leading-relaxed text-parchment-dim">Enter Nearhaven with 100 gold. Ten autonomous merchants farm, bake, forge, trade and lend — reacting to every harvest, shortage and trade you make. Build a trading empire and own it on NEAR.</p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="/register" className="btn btn-gold px-6 py-3 text-base">Enter Nearhaven</Link>
-              <Link href="/demo" className="btn btn-ghost px-6 py-3 text-base">Play the 3-minute demo</Link>
-            </div>
-            {world && <p className="mt-6 text-xs text-muted">Live now: day {world.day}, {world.season} · {world.population} citizens · {world.players} human merchant{world.players === 1 ? '' : 's'}</p>}
-          </div>
-        </div>
-      </section>
+      <TitleScreen />
 
       {/* Live ticker */}
       {m && (
-        <div className="relative z-10 border-y border-line/60 bg-walnut/80 backdrop-blur">
+        <div id="about" className="relative z-10 border-y border-line/60 bg-walnut/80 backdrop-blur">
           <div className="mx-auto flex max-w-6xl gap-6 overflow-x-auto px-6 py-3">
             {RESOURCES.map((r) => (
               <div key={r} className="flex shrink-0 items-center gap-2 text-sm">

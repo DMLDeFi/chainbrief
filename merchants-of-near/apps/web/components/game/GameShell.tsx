@@ -6,6 +6,7 @@ import { useSettings } from '@/lib/hooks';
 import { gameAudio } from '@/lib/audio';
 import type { Selection } from '@/game/TownScene';
 import { TownCanvas, type TownHandle } from '../TownCanvas';
+import { FlyLayer } from './FlyLayer';
 import { IconBag, IconChart, IconCrown, IconGear, IconHouse, IconMedal, IconPeople, IconScale, IconScroll, IconWallet, IconPlus, IconMinus } from '../icons';
 import { Hud } from './Hud';
 import { Feed } from './Feed';
@@ -129,6 +130,7 @@ export function GameShell() {
           <button
             key={d.id}
             onClick={() => open(d.id)}
+            data-fly-target={d.id === 'inventory' ? 'inventory' : undefined}
             title={`${d.label} (${d.key})`}
             aria-pressed={panel === d.id}
             className={`group relative grid h-11 w-11 shrink-0 place-items-center rounded-xl border transition ${panel === d.id ? 'border-brass bg-brass text-ink shadow-[var(--shadow-glow)]' : 'panel-glass text-parchment-dim hover:text-brass-bright'}`}
@@ -145,6 +147,7 @@ export function GameShell() {
         <button className="panel-glass grid h-10 w-10 place-items-center text-parchment-dim hover:text-brass" onClick={() => town.current?.zoom(0.83)} aria-label="Zoom out"><IconMinus size={18} /></button>
       </div>
 
+      <FlyLayer reducedMotion={settings.reducedMotion} />
       {settings.feed && <Feed feed={feed} world={world} compact={settings.compactFeed} onMerchant={showMerchant} />}
 
       {/* Panel area */}

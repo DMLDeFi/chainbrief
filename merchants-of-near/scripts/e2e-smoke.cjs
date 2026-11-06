@@ -9,6 +9,8 @@ const BASE = process.argv[2] ?? 'http://localhost:3000';
 (async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  // Headless CI renders WebGL in software (a few FPS), so give UI waits room.
+  page.setDefaultTimeout(90000);
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   const id = Date.now().toString(36).slice(-6);

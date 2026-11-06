@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import type { MerchantState, PublicSnapshot, Resource } from '@mon/engine';
 import { api, type Me } from '@/lib/api';
+import { Portrait } from '@/components/Portrait';
 import { RESOURCE_DEFS, RESOURCES, ROLE_COLOR, ROLE_TITLE } from '@/lib/catalog';
 import { useAction, useFetch } from '@/lib/hooks';
 import { toast } from '@/lib/store';
@@ -19,7 +20,7 @@ export function MerchantsPanel({ world, me, selected, onSelect, onBack, onClose 
         {world.merchants.map((m) => (
           <button key={m.id} onClick={() => onSelect(m.id)} className="group rounded-xl border border-line/60 bg-black/20 p-3.5 text-left transition hover:border-brass-deep hover:bg-black/30">
             <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border-2 text-sm font-bold" style={{ borderColor: ROLE_COLOR[m.role], color: ROLE_COLOR[m.role] }}>{m.name.split(' ').map((w) => w[0]).join('').slice(0, 2)}</span>
+              <span className="shrink-0"><Portrait id={m.id} role={m.role} size={42} mood={m.status} /></span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="truncate font-semibold">{m.name}</span>
@@ -52,7 +53,7 @@ function Profile({ id, world, me, onBack, onClose }: { id: string; world: Public
   if (!m) return <Drawer wide title="Loading…" onClose={onClose}><div className="skeleton h-64 rounded-xl" /></Drawer>;
   const color = ROLE_COLOR[m.role];
   return (
-    <Drawer wide title={m.name} subtitle={`${ROLE_TITLE[m.role]} · ${m.title}${m.generation ? ` · generation ${m.generation + 1}` : ''}`} icon={<span style={{ color }} className="text-sm font-bold">{m.name.split(' ').map((w) => w[0]).join('').slice(0, 2)}</span>} onClose={onClose}>
+    <Drawer wide title={m.name} subtitle={`${ROLE_TITLE[m.role]} · ${m.title}${m.generation ? ` · generation ${m.generation + 1}` : ''}`} icon={<Portrait id={m.id} role={m.role} size={34} mood={m.status} />} onClose={onClose}>
       <button onClick={onBack} className="mb-3 text-xs text-muted hover:text-brass">← All merchants</button>
       <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
         <div className="space-y-4">

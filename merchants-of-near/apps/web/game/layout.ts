@@ -46,15 +46,6 @@ export const PLOTS: Array<{ gx: number; gy: number }> = [
   { gx: 6, gy: 18 }, { gx: 18, gy: 25 }, { gx: 26, gy: 18 }, { gx: 13, gy: 3 },
 ];
 
-export const PLAYER_STYLE: Record<string, { wall: number; roof: number; style: BuildingStyle; h: number; chimney?: boolean }> = {
-  farm: { wall: 0xcfa874, roof: 0xa0522d, style: 'barn', h: 24 },
-  bakery: { wall: 0xeedcb4, roof: 0xc2652f, style: 'house', h: 28, chimney: true },
-  blacksmith: { wall: 0x8f877c, roof: 0x34313a, style: 'forge', h: 26, chimney: true },
-  textile: { wall: 0xe0c7d0, roof: 0x8b5786, style: 'house', h: 28 },
-  warehouse: { wall: 0xa98256, roof: 0x5d4a35, style: 'warehouse', h: 30 },
-  trading: { wall: 0xbf9466, roof: 0x2d6170, style: 'warehouse', h: 32 },
-};
-
 export function tileKind(gx: number, gy: number): 'water' | 'road' | 'plaza' | 'field' | 'dirt' | 'grass' | 'sand' {
   if (gx <= 2 || (gx === 3 && gy % 5 !== 0)) return 'water';
   if (gx === 3) return 'sand';
@@ -75,3 +66,18 @@ export const hash2 = (x: number, y: number) => {
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 };
+
+/** Decorative (non-merchant) architecture: tavern and town houses. */
+export interface DecorDef { id: string; label: string; gx: number; gy: number; w: number; d: number }
+export const DECOR: DecorDef[] = [
+  { id: 'tavern', label: 'The Gilded Tankard — tavern & inn', gx: 11, gy: 16, w: 2, d: 2 },
+  { id: 'house0', label: 'Town house', gx: 19, gy: 7, w: 1, d: 1 },
+  { id: 'house1', label: 'Town house', gx: 10, gy: 6, w: 1, d: 1 },
+  { id: 'house2', label: 'Town house', gx: 20, gy: 13, w: 1, d: 1 },
+  { id: 'house3', label: 'Town house', gx: 19, gy: 22, w: 1, d: 1 },
+  { id: 'house4', label: 'Town house', gx: 14, gy: 24, w: 1, d: 1 },
+  { id: 'house5', label: 'Town house', gx: 22, gy: 19, w: 1, d: 1 },
+  { id: 'house6', label: 'Town house', gx: 7, gy: 9, w: 1, d: 1 },
+  { id: 'house7', label: 'Town house', gx: 16, gy: 19, w: 1, d: 1 },
+  { id: 'house8', label: 'Town house', gx: 13, gy: 19, w: 1, d: 1 },
+];

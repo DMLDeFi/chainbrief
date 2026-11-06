@@ -6,6 +6,7 @@ import type { Me } from '@/lib/api';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/store';
 import { cap, gold, hourLabel, timeOfDay } from '@/lib/format';
+import { CountUp } from '../ui';
 import { Coin, IconFast, IconMute, IconSound, Logo, WeatherIcon } from '../icons';
 import { gameAudio, useAudio } from '@/lib/audio';
 import type { PanelId } from './GameShell';
@@ -88,8 +89,8 @@ export function Hud({ world, me, onOpen, connected }: { world: PublicSnapshot; m
         <button onClick={() => onOpen('inventory')} className="panel-glass flex items-center gap-3 px-3 py-2 text-left">
           <Coin size={22} className="max-sm:hidden" />
           <div>
-            <div className="num display text-lg font-bold leading-none text-brass-bright">{gold(p.gold)}</div>
-            <div className="num mt-1 whitespace-nowrap text-[10px] text-muted">net worth {gold(p.netWorth)}</div>
+            <div data-fly-target="gold" className="num display inline-block origin-left text-lg font-bold leading-none text-brass-bright"><CountUp value={p.gold} format={gold} /></div>
+            <div className="num mt-1 whitespace-nowrap text-[10px] text-muted">net worth <CountUp value={p.netWorth} format={gold} /></div>
           </div>
         </button>
         <button

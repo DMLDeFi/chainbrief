@@ -4,6 +4,7 @@ import type { PublicSnapshot, Resource } from '@mon/engine';
 import type { Me } from '@/lib/api';
 import { RESOURCE_DEFS, RESOURCES, estimate } from '@/lib/catalog';
 import { useAction, useFetch } from '@/lib/hooks';
+import { fly, originOf } from '@/lib/fx';
 import { gold } from '@/lib/format';
 import { Badge, Delta, Drawer, Empty, Meter, Sparkline, Tabs } from '../../ui';
 import { Coin, IconScale, ResourceIcon } from '../../icons';
@@ -88,14 +89,17 @@ function TradeBox({ market, marketId, r, me }: { market: PublicSnapshot['markets
   const basis = p.costBasis[r];
   const def = RESOURCE_DEFS[r];
 
-  const trade = (side: 'buy' | 'sell') => {
+  const trade = async (side: 'buy' | 'sell', origin = originOf()) => {
     const est = side === 'buy' ? buy : sell;
     // Slippage guard: reject if the price moves more than 6% against us before execution.
     const limitPrice = Number((side === 'buy' ? est.avg * 1.06 : est.avg * 0.94).toFixed(2));
-    return run<{ qty: number; avgPrice: number; total: number; realizedProfit: number }>(
+    const res = await run<{ qty: number; avgPrice: number; total: number; realizedProfit: number }>(
       { type: 'trade', side, resource: r, qty, market: marketId, limitPrice },
       (t) => `${side === 'buy' ? 'Bought' : 'Sold'} ${t.qty} ${r} at ${gold(t.avgPrice)} (${gold(t.total)}g)${side === 'sell' && t.realizedProfit ? ` · P/L ${t.realizedProfit > 0 ? '+' : ''}${gold(t.realizedProfit)}` : ''}`,
     );
+    // Only animate once the server has confirmed the trade.
+    if (res) fly(side === 'buy' ? { kind: 'goods', resource: r, from: origin, count: Math.ceil(res.qty / 3) } : { kind: 'coins', from: origin, count: Math.ceil(res.qty / 3) });
+    return res;
   };
 
   return (
@@ -136,13 +140,13 @@ function TradeBox({ market, marketId, r, me }: { market: PublicSnapshot['markets
           <div className="label">Buy cost ≈</div>
           <div className="num mt-1 flex items-center gap-1.5 text-lg font-bold"><Coin size={16} />{gold(buy.total)}</div>
           <div className="num text-[11px] text-muted">avg {gold(buy.avg)} · after {gold(buy.after)}</div>
-          <button disabled={busy || !buy.feasible || buy.total > p.gold || qty > free} onClick={() => trade('buy')} className="btn btn-gold mt-3 w-full py-2">Buy {qty}</button>
+          <button disabled={busy || !buy.feasible || buy.total > p.gold || qty > free} onClick={(e) => trade('buy', originOf(e.currentTarget))} className="btn btn-gold mt-3 w-full py-2">Buy {qty}</button>
         </div>
         <div className="rounded-xl border border-line/60 bg-black/20 p-3">
           <div className="label">Sell yields ≈</div>
           <div className="num mt-1 flex items-center gap-1.5 text-lg font-bold"><Coin size={16} />{gold(sell.total)}</div>
           <div className="num text-[11px] text-muted">avg {gold(sell.avg)}{basis ? <> · P/L <span className={sell.avg >= basis ? 'text-moss' : 'text-ember'}>{gold((sell.avg - basis) * qty)}</span></> : null}</div>
-          <button disabled={busy || held < qty} onClick={() => trade('sell')} className="btn btn-ghost mt-3 w-full py-2">Sell {qty}</button>
+          <button disabled={busy || held < qty} onClick={(e) => trade('sell', originOf(e.currentTarget))} className="btn btn-ghost mt-3 w-full py-2">Sell {qty}</button>
         </div>
       </div>
       <p className="mt-3 text-[11px] leading-snug text-muted">Estimates use the live price curve. The exchange settles the real price server-side and rejects the trade if it moves more than 6% against you. Fee {(market.fee * 100).toFixed(0)}%.</p>

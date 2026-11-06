@@ -55,6 +55,7 @@ export const TownCanvas = forwardRef<TownHandle, Props>(function TownCanvas({ wo
           getPlayerId: () => latest.current.playerId,
           getSettings: () => latest.current.settings ?? { weather: true, reducedMotion: false },
         },
+        cinematic: !interactive,
       });
       scene.current = s;
       if (latest.current.world) s.setWorld(latest.current.world);

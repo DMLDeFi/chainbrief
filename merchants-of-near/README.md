@@ -131,6 +131,18 @@ merchants-of-near/
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the economic model, the agent loop and the NEAR flows.
 
+### Art pipeline
+
+Every sprite is painted procedurally at boot from one art direction, in `apps/web/game/art/`. There are no downloaded or third-party assets.
+
+- **`palette.ts`**: one colour story (sandstone, oak, emerald, antique gold, amber light, muted stone) and a single light direction: the sun is to the upper left, so left faces are lit and right faces are in shade.
+- **`materials.ts`**: brick, ashlar, rubble stone, half-timber, planks, plaster, clay tile, thatch, slate and shingle. Each is laid out in the face's own perspective, with ambient occlusion at the base and eave shadows.
+- **`buildings.ts`**: a spec per building. It sets wall and roof materials, plinth, door type, framed and shuttered windows, a signboard emblem, chimneys, an awning, an open forge, columns, a clock tower or a porch. Player businesses are pre-rendered at three upgrade levels.
+- **`characters.ts`**: a 17-frame sprite sheet per character, 28×40 px with the feet at (14, 37). It covers idle, walk, run, work, carry, cheer, frustrated and sleep, each registered as a Phaser animation. Each look has its own proportions, hat, tool and carried goods.
+- **`props.ts`**: market stalls, fountain, well, bridge, haystacks, fences, crates, barrels, anvil, weapon rack, log piles, boats, cloth lines, lamps, scaffolding, goods tokens and FX particles.
+
+The scene bakes the static ground into one render texture and depth-sorts every object by its screen y. If frame times stay long, it switches off decorative effects (motes, fog, wind sway, birds).
+
 ---
 
 ## The economic engine in brief
@@ -199,7 +211,7 @@ The contract tests cover valid claims, forged, replayed and expired certificates
 - **Multiplayer:** asynchronous. All players share one live world (prices, merchants, plots and the P2P market) and receive real-time updates over WebSocket. There is no direct real-time chat or trading. The server runs as a single authoritative process; scaling out would mean sharding worlds per process.
 - **Fast-forward** advances the shared world for everyone. Disable it with `ALLOW_FAST_FORWARD=false` for public servers.
 - The world snapshot is saved every 12 in-game hours and on shutdown, and ledger entries are written immediately. A crash can lose up to about 24 seconds of world state.
-- All art is procedural, generated at runtime. There are no third-party game assets.
+- All art is procedural, generated at runtime. There are no third-party game assets. The style is clean 2.5D vector-painted isometric rather than hand-painted illustration, because no image-generation or asset sources were available while building it.
 
 ## License
 

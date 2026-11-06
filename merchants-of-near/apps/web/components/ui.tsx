@@ -1,5 +1,5 @@
 'use client';
-import { useId, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { IconClose } from './icons';
 
 export function Sparkline({ data, width = 120, height = 32, color = '#d9a84a', fill = true }: { data: number[]; width?: number; height?: number; color?: string; fill?: boolean }) {
@@ -82,8 +82,8 @@ export function Stat({ label, value, sub, accent }: { label: string; value: Reac
 
 export function Drawer({ title, subtitle, icon, onClose, children, wide }: { title: string; subtitle?: string; icon?: ReactNode; onClose: () => void; children: ReactNode; wide?: boolean }) {
   return (
-    <div className={`panel-glass pointer-events-auto flex max-h-full w-full flex-col overflow-hidden animate-rise ${wide ? 'max-w-[860px]' : 'max-w-[560px]'}`} role="dialog" aria-label={title}>
-      <div className="flex items-center gap-3 border-b border-line/70 px-5 py-4">
+    <div className={`panel-glass ornate relative pointer-events-auto flex max-h-full w-full flex-col overflow-hidden animate-rise ${wide ? 'max-w-[860px]' : 'max-w-[560px]'}`} role="dialog" aria-label={title}>
+      <div className="relative flex items-center gap-3 border-b border-line/70 bg-[linear-gradient(180deg,rgba(244,201,107,0.07),transparent)] px-5 py-4">
         {icon && <div className="grid h-9 w-9 place-items-center rounded-lg border border-brass-deep/60 bg-brass/10 text-brass">{icon}</div>}
         <div className="min-w-0 flex-1">
           <h2 className="display truncate text-lg font-bold text-parchment">{title}</h2>
@@ -115,4 +115,28 @@ export function Empty({ children }: { children: ReactNode }) {
 export function Badge({ children, tone = 'brass' }: { children: ReactNode; tone?: 'brass' | 'moss' | 'ember' | 'river' | 'near' | 'muted' }) {
   const c = { brass: 'text-brass border-brass/40 bg-brass/10', moss: 'text-moss border-moss/40 bg-moss/10', ember: 'text-ember border-ember/40 bg-ember/10', river: 'text-river border-river/40 bg-river/10', near: 'text-near border-near/40 bg-near/10', muted: 'text-muted border-line bg-black/20' }[tone];
   return <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${c}`}>{children}</span>;
+}
+
+/** Number that counts smoothly to its new value (gold purse, net worth). */
+export function CountUp({ value, format, duration = 700 }: { value: number; format: (n: number) => string; duration?: number }) {
+  const [shown, setShown] = useState(value);
+  const from = useRef(value);
+  const shownRef = useRef(value);
+  useEffect(() => {
+    const start = performance.now();
+    from.current = shownRef.current;
+    const reduce = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || from.current === value) { shownRef.current = value; setShown(value); return; }
+    let raf = 0;
+    const step = (t: number) => {
+      const k = Math.min(1, (t - start) / duration);
+      const e = 1 - Math.pow(1 - k, 3);
+      shownRef.current = from.current + (value - from.current) * e;
+      setShown(shownRef.current);
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [value, duration]);
+  return <>{format(shown)}</>;
 }
