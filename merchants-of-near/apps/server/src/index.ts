@@ -1,6 +1,5 @@
 import { loadConfig } from './config';
 import { FileStore } from './store/file';
-import { PrismaStore } from './store/prisma';
 import type { Store } from './store/types';
 import { GameService } from './game';
 import { NearService } from './near/service';
@@ -8,7 +7,11 @@ import { MerchantDialogue } from './ai';
 import { buildApp } from './app';
 
 const config = loadConfig();
-const store: Store = config.databaseUrl ? new PrismaStore(config.databaseUrl) : new FileStore(config.dataDir);
+// Load the Prisma store only when a database is configured, so the zero-setup
+// JSON store works even if `prisma generate` has not run.
+const store: Store = config.databaseUrl
+  ? new (await import('./store/prisma')).PrismaStore(config.databaseUrl)
+  : new FileStore(config.dataDir);
 await store.init();
 const game = new GameService(store, { seed: config.seed, tickMs: config.tickMs });
 await game.init();
