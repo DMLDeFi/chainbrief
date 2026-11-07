@@ -1,5 +1,8 @@
 import {
   addRoute,
+  fundProject,
+  INFRA_KINDS,
+  type InfraKind,
   RESOURCES,
   BUSINESS_DEFS,
   removeRoute,
@@ -53,6 +56,7 @@ export const ActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('business.buy'), kind: z.enum(Object.keys(BUSINESS_DEFS) as [BusinessKind, ...BusinessKind[]]), city: city.optional() }),
   z.object({ type: z.literal('route.add'), from: city, to: city, resource, batch: z.number().int().min(5).max(500), keep: z.number().int().min(0).max(5000).optional() }),
   z.object({ type: z.literal('route.remove'), routeId: id }),
+  z.object({ type: z.literal('city.fund'), city, project: z.enum(INFRA_KINDS as [InfraKind, ...InfraKind[]]), amount: z.number().int().min(10).max(100000) }),
   z.object({ type: z.literal('route.toggle'), routeId: id, active: z.boolean() }),
   z.object({ type: z.literal('business.sell'), businessId: id }),
   z.object({ type: z.literal('land.buy'), city }),
@@ -191,6 +195,9 @@ export class GameService {
         break;
       case 'business.buy':
         r = buyBusiness(w, userId, action.kind, action.city ?? 'nearhaven');
+        break;
+      case 'city.fund':
+        r = fundProject(w, userId, action);
         break;
       case 'route.add':
         r = addRoute(w, userId, action);

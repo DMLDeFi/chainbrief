@@ -213,6 +213,23 @@ describe('authoritative actions', () => {
     expect(me.player.routes).toHaveLength(0);
   });
 
+  it('funds public works and reports each city\'s growth, labour and projects', async () => {
+    const { cookie } = await register();
+    const id = (await ctx.app.inject({ method: 'GET', url: '/api/me', headers: { cookie } })).json().player.id;
+    Object.assign(ctx.game.world.players[id], { gold: 5000, level: 5 });
+    expect((await act(cookie, { type: 'city.fund', city: 'goldenvale', project: 'granary', amount: 100 })).statusCode).toBe(422); // no office
+    expect((await act(cookie, { type: 'city.charter', city: 'goldenvale' })).statusCode).toBe(200);
+    expect((await act(cookie, { type: 'city.fund', city: 'goldenvale', project: 'castle', amount: 100 })).statusCode).toBe(400);
+    const r = await act(cookie, { type: 'city.fund', city: 'goldenvale', project: 'granary', amount: 250 });
+    expect(r.statusCode, r.body).toBe(200);
+    const snap = (await ctx.app.inject({ method: 'GET', url: '/api/world' })).json();
+    const vale = snap.cities.goldenvale;
+    expect(vale.labor.supply).toBeGreaterThan(0);
+    expect(vale.works.find((x: { kind: string }) => x.kind === 'granary').funded).toBeGreaterThanOrEqual(250);
+    const me = (await ctx.app.inject({ method: 'GET', url: '/api/me', headers: { cookie } })).json();
+    expect(me.player.patronage.goldenvale).toBe(250);
+  });
+
   it('records every gold movement in the ledger', async () => {
     const { cookie } = await register();
     await act(cookie, { type: 'trade', side: 'buy', resource: 'wheat', qty: 3 });

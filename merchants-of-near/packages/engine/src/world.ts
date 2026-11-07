@@ -6,6 +6,7 @@ import { citizenBaseDemand, demandFactor, maybeStartEvent, productionFactor, upd
 import { merchantDaily, runMerchants } from './merchants';
 import { businessDaily, runBusiness } from './businesses';
 import { landTaxDaily } from './property';
+import { cityInvest, civicDaily, FOOD, granaryFactor, infraLevel, populationCap, sizeFactors } from './civic';
 import { collectLoans } from './banking';
 import { playerDaily } from './players';
 import { evaluateProgression } from './progression';
@@ -41,7 +42,7 @@ export function createWorld(seed = 20260101): WorldState {
     ledger: [],
     guildTreasury: 500,
     reported: Object.fromEntries(MARKETS.map((id) => [id, { price: { ...markets[id].price }, stock: { ...markets[id].stock } }])) as WorldState['reported'],
-    cities: Object.fromEntries(MARKETS.map((id) => [id, { population: CITY_DEFS[id].population }])) as WorldState['cities'],
+    cities: Object.fromEntries(MARKETS.map((id) => [id, { population: CITY_DEFS[id].population, growth: 0, popHistory: [] as number[], infra: {}, projects: {} }])) as unknown as WorldState['cities'],
     shipments: {},
     stats: { dayFoodSatisfaction: 0, lastDayFoodSatisfaction: 1 },
   };
@@ -66,7 +67,14 @@ function citizensConsume(world: WorldState): void {
   // Households save, pay taxes and spend beyond the map: above a comfortable level the
   // town purse leaks 1% of the excess each hour, so outside income cannot inflate it forever.
   const comfortable = 3000 + world.population * 6;
-  if (m.treasury > comfortable) m.treasury = money(m.treasury - (m.treasury - comfortable) * 0.01);
+  if (m.treasury > comfortable) {
+    const out = money((m.treasury - comfortable) * 0.01);
+    m.treasury = money(m.treasury - out);
+    cityInvest(world, 'nearhaven', out * 0.05);
+  }
+  // Nearhaven's granary releases bread into the exchange.
+  const gLv = infraLevel(world, 'nearhaven', 'granary');
+  if (gLv > 0) { m.stock.bread = Math.round((m.stock.bread + 0.25 * gLv) * 100) / 100; m.tickProduced.bread += 0.25 * gLv; }
   let wantedFood = 0;
   let gotFood = 0;
   for (const r of CITIZEN_PRIORITY) {
@@ -105,9 +113,13 @@ function regionFlows(world: WorldState): void {
 }
 function regionFlow(world: WorldState, id: (typeof MARKETS)[number], flows: (typeof CITY_DEFS)['aurora']['flows']): void {
   const m = world.markets[id];
+  const size = sizeFactors(world, id);
+  const granary = granaryFactor(world, id);
   for (const r of RESOURCES) {
-    const f = flows[r];
-    if (!f) continue;
+    const f0 = flows[r];
+    if (!f0) continue;
+    // A bigger city eats more and makes a little more; granaries add food.
+    const f = { produce: f0.produce * size.produce * (FOOD.has(r) ? granary : 1), consume: f0.consume * size.consume };
     const produced = f.produce * (SEASONAL_RAW.has(r) ? productionFactor(world, r) : 1);
     m.stock[r] = Math.round((m.stock[r] + produced) * 100) / 100;
     m.tickProduced[r] += produced;
@@ -121,8 +133,13 @@ function regionFlow(world: WorldState, id: (typeof MARKETS)[number], flows: (typ
   // A regional economy is not a closed vault: above twice its normal purse, coin
   // leaves through taxes, savings and trade beyond the map, so the hinterland's
   // spending cannot inflate the whole world.
+  // A small share of what leaves is invested by the city in its own public works.
   const target = CITY_DEFS[id].treasury * 2;
-  if (m.treasury > target) m.treasury = money(m.treasury - (m.treasury - target) * 0.01);
+  if (m.treasury > target) {
+    const out = money((m.treasury - target) * 0.01);
+    m.treasury = money(m.treasury - out);
+    cityInvest(world, id, out * 0.05);
+  }
 }
 
 /** Report significant price moves to the activity feed, explained by the underlying state change. */
@@ -180,7 +197,8 @@ function daily(world: WorldState): void {
   const before = world.population;
   if (sat > 0.9) world.population = Math.round(world.population * (1 + ECONOMY.popGrowth));
   else if (sat < 0.6) world.population = Math.round(world.population * (1 - ECONOMY.popDecline));
-  world.population = clamp(world.population, 200, 1200);
+  world.population = clamp(world.population, 200, populationCap(world, 'nearhaven'));
+  civicDaily(world);
   if (world.population !== before) {
     pushFeed(world, {
       kind: 'population',

@@ -4,6 +4,7 @@ import { addInv, fail, fmt, invTotal, money, newId, ok, pushFeed } from './inter
 import { CITY_DEFS, findPath, freightCost, travelTicks } from './cities';
 import { createMarket } from './market';
 import { bumpMetric } from './progression';
+import { freightFor } from './civic';
 import { warehouseBonus } from './businesses';
 
 /** Units a trading office's depot can hold in another city. */
@@ -80,7 +81,7 @@ export function shipGoods(world: WorldState, playerId: string, req: { from: unkn
     const room = depotCapacity(p, req.to, world) - invTotal(storeFor(p, req.to)) - incoming(world, p.id, req.to);
     if (qty > room) return fail(`The ${CITY_DEFS[req.to].name} depot has room for ${Math.max(0, Math.floor(room))} more units`);
   }
-  const cost = freightCost(req.from, req.to, qty);
+  const cost = freightFor(world, req.from, req.to, qty);
   if (p.gold < cost) return fail(`Freight costs ${fmt(cost)}g`);
   // -- validated; mutate --
   p.gold = money(p.gold - cost);
@@ -186,7 +187,10 @@ export function migrateWorld(world: WorldState): WorldState {
     }
   }
   world.cities ??= {} as WorldState['cities'];
-  for (const id of MARKETS) world.cities[id] ??= { population: id === 'nearhaven' ? world.population : CITY_DEFS[id].population };
+  for (const id of MARKETS) {
+    const c = (world.cities[id] ??= { population: id === 'nearhaven' ? world.population : CITY_DEFS[id].population } as WorldState['cities'][MarketId]);
+    c.growth ??= 0; c.popHistory ??= []; c.infra ??= {}; c.projects ??= {};
+  }
   world.shipments ??= {};
   // Land: every existing business stood in Nearhaven, on the plots in plotsUsed.
   if (!world.landUse) {

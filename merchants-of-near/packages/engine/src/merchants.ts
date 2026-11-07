@@ -1,3 +1,4 @@
+import { freightFor } from './civic';
 import { ECONOMY, MARKETS, RESOURCE_DEFS, type MarketId, type Recipe, type Resource } from './config';
 import { CITY_DEFS, freightCost, travelTicks } from './cities';
 import type { MemoryItem, MerchantRole, MerchantState, Result, WorldState } from './types';
@@ -344,7 +345,7 @@ function bestOnRoute(world: WorldState, from: MarketId, to: MarketId, budget: nu
       const learnedAdj = learned[routeKey] ?? 1; // memory of realised vs expected
       // Longer journeys carry more price risk; freight is paid per unit and hour.
       const expectedRevenue = sell.data.total * clamp(learnedAdj, 0.6, 1.1) * (1 - 0.004 * hours);
-      const profit = expectedRevenue - buy.data.total - freightCost(from, to, q);
+      const profit = expectedRevenue - buy.data.total - freightFor(world, from, to, q);
       if (!bestQ || profit > bestQ.expectedProfit) bestQ = { resource: r, from, to, qty: q, cost: buy.data.total, expectedRevenue, expectedProfit: profit };
     }
     if (bestQ && (!best || bestQ.expectedProfit > best.expectedProfit)) best = bestQ;
@@ -397,7 +398,7 @@ function runTrader(world: WorldState, m: MerchantState, idx: number): void {
     addInv(m.inventory, opp.resource, -opp.qty);
     const fromP = world.markets[opp.from].price[opp.resource];
     const toP = world.markets[opp.to].price[opp.resource];
-    const freight = freightCost(opp.from, opp.to, opp.qty);
+    const freight = freightFor(world, opp.from, opp.to, opp.qty);
     m.travel = { to: opp.to, from: opp.from, arriveTick: world.tick + travelTicks(opp.from, opp.to), cargo: { [opp.resource]: opp.qty }, costBasis: q.total + freight, expected: opp.expectedRevenue };
     m.gold = money(m.gold - freight); // caravan hire, tolls and carters, paid into the origin city
     world.markets[opp.from].treasury = money(world.markets[opp.from].treasury + freight);

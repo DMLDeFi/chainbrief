@@ -4,6 +4,7 @@ import { CITY_DEFS, findPath, MARKETS, RESOURCES, ROUTES, type CityArchetype, ty
 import type { Me } from '@/lib/api';
 import { RESOURCE_DEFS } from '@/lib/catalog';
 import { gold } from '@/lib/format';
+import { CityCivic } from './CityCivic';
 import { Badge, Delta } from '../ui';
 import { IconClose, ResourceIcon } from '../icons';
 import { CharterCard } from './panels/MarketPanel';
@@ -211,6 +212,7 @@ export function WorldMap({ world, me, onClose, onVisit, viewCity }: { world: Pub
             <CharterCard city={sel} me={me} />
           )}
           <button onClick={() => onVisit(sel)} className="btn btn-gold w-full py-2">{`Trade at the ${world.markets[sel].name}`}</button>
+          <CityCivic world={world} me={me} city={sel} />
         </div>
       </aside>
     </div>

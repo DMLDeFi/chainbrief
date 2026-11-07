@@ -267,7 +267,7 @@ function Detail({ b, me, world }: { b: OwnedBiz; me: Me; world: PublicSnapshot }
         <div className="panel p-4">
           <div className="label mb-2">Workforce</div>
           <div className="num text-2xl font-bold">{b.workers} <span className="text-sm text-muted">/ {b.maxWorkers}</span></div>
-          <div className="text-[11px] text-muted">{gold(b.def.wage * landDef(b.city).wages)}g per worker per day in {CITY_DEFS[b.city].name} · signing fee {b.def.wage * 2}g</div>
+          <div className="text-[11px] text-muted">{gold(b.def.wage * landDef(b.city).wages * (world.cities[b.city]?.labor?.wageFactor ?? 1))}g per worker per day in {CITY_DEFS[b.city].name}{(world.cities[b.city]?.labor?.wageFactor ?? 1) > 1 ? ` (labour is short: ×${world.cities[b.city].labor.wageFactor})` : ''} · {world.cities[b.city]?.labor ? `${world.cities[b.city].labor.supply - world.cities[b.city].labor.employed} hands free` : ''} · signing fee {b.def.wage * 2}g</div>
           <div className="mt-3 flex gap-2">
             <button disabled={busy || b.workers >= b.maxWorkers} onClick={() => run({ type: 'business.hire', businessId: b.id }, 'Worker hired')} className="btn btn-gold flex-1 py-1.5 text-sm">Hire</button>
             <button disabled={busy || b.workers <= 0} onClick={() => run({ type: 'business.fire', businessId: b.id }, 'Worker dismissed')} className="btn btn-ghost flex-1 py-1.5 text-sm">Dismiss</button>

@@ -1,8 +1,9 @@
 import { ECONOMY, MARKETS, RESOURCE_DEFS, RESOURCES, type MarketId, type Recipe, type Resource } from './config';
 import { freightCost, travelTicks } from './cities';
 import { CITY_DEFS } from './cities';
+import { civicBoost, freightFor, laborEmployed, laborSupply, wageFactor } from './civic';
 import { depotCapacity, hasAccess, isCity, storeFor } from './logistics';
-import { affinity, freePlot, landDef, landPrice, landValue, plotsTaken, releasePlot, starterGrant, takePlot } from './property';
+import { affinity, plotCount, freePlot, landDef, landPrice, landValue, plotsTaken, releasePlot, starterGrant, takePlot } from './property';
 import type { Business, BusinessKind, Industry, Result, WorldState } from './types';
 import { addInv, dayOf, fail, fmt, invTotal, money, newId, ok, pushFeed } from './internal';
 import { maxAffordable, quoteBuy, quoteSell, settleOnMarket } from './market';
@@ -207,7 +208,7 @@ export function businessQuote(world: WorldState, playerId: string, kind: Busines
   const ownLand = !!p?.land.some((l) => l.city === city);
   const grant = !!p && !ownLand && starterGrant(world, p, city);
   const land = ownLand || grant ? 0 : landPrice(world, city);
-  return { build, land, total: money(build + land), ownLand, grant, affinity: affinity(city, kind), plotsFree: landDef(city).plots - plotsTaken(world, city) + (ownLand ? 1 : 0) };
+  return { build, land, total: money(build + land), ownLand, grant, affinity: affinity(city, kind), plotsFree: plotCount(world, city) - plotsTaken(world, city) + (ownLand ? 1 : 0) };
 }
 
 export function buyBusiness(world: WorldState, playerId: string, kind: BusinessKind, city: unknown = 'nearhaven'): Result<Business> {
@@ -309,6 +310,8 @@ export function hireWorker(world: WorldState, playerId: string, businessId: stri
   const p = world.players[playerId];
   const fee = BUSINESS_DEFS[b.kind].wage * 2;
   if (b.workers >= businessMaxWorkers(b)) return fail('Upgrade the business to hire more workers');
+  const city: MarketId = b.city ?? 'nearhaven';
+  if (laborEmployed(world, city) >= laborSupply(world, city)) return fail(`Nobody in ${CITY_DEFS[city].name} is looking for work. The city must grow before you can hire more here`);
   if (p.gold < fee) return fail(`Hiring costs a ${fee}g signing fee`);
   p.gold = money(p.gold - fee);
   b.workers += 1;
@@ -433,7 +436,7 @@ function runCaravan(world: WorldState, b: Business): void {
   const p = world.players[b.ownerId];
   const home: MarketId = b.city ?? 'nearhaven';
   const payFreight = (from: MarketId, to: MarketId, qty: number) => {
-    const f = freightCost(from, to, qty);
+    const f = freightFor(world, from, to, qty);
     p.gold = money(p.gold - f);
     world.markets[from].treasury = money(world.markets[from].treasury + f);
   };
@@ -542,7 +545,7 @@ export function runBusiness(world: WorldState, b: Business): void {
   const out = Object.keys(rc.outputs)[0] as Resource;
   const city: MarketId = b.city ?? 'nearhaven';
   const m = world.markets[city];
-  const eff = def.efficiency[b.level - 1] * affinity(city, b.kind);
+  const eff = def.efficiency[b.level - 1] * affinity(city, b.kind) * civicBoost(world, city, b.kind);
 
   const inputs = Object.entries(rc.inputs) as Array<[Resource, number]>;
   if (world.tick % 3 === 0 && inputs.length) {
@@ -655,7 +658,7 @@ export function businessDaily(world: WorldState, b: Business): void {
   const def = BUSINESS_DEFS[b.kind];
   const city: MarketId = b.city ?? 'nearhaven';
   // Staff are paid local wages; upkeep grows with the size of the whole company.
-  let cost = money(def.wage * landDef(city).wages * b.workers + def.upkeep * b.level * overheadFactor(world, p.id));
+  let cost = money(def.wage * landDef(city).wages * wageFactor(world, city) * b.workers + def.upkeep * b.level * overheadFactor(world, p.id));
   if (b.kind === 'warehouse') {
     // Merchants rent space when the market is glutted: rent scales with total market overstock.
     const m = world.markets[city];

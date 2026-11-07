@@ -2,6 +2,7 @@ import { MARKETS, type MarketId } from './config';
 import type { BusinessKind, PlayerState, Result, WorldState } from './types';
 import { fail, money, ok, pushFeed } from './internal';
 import { CITY_DEFS, type CityArchetype } from './cities';
+import { cityPopulation, extraPlots } from './civic';
 
 /**
  * Land and property. Every city has a fixed number of building plots. Land is
@@ -43,6 +44,9 @@ export const affinity = (city: MarketId, kind: BusinessKind) => AFFINITY[CITY_DE
 /** Daily land tax as a share of the plot's current value. */
 export const LAND_TAX = 0.01;
 
+/** Plots in a city: its original land plus districts opened by housing projects. */
+export const plotCount = (world: WorldState, city: MarketId) => landDef(city).plots + extraPlots(world, city);
+
 export function plotsTaken(world: WorldState, city: MarketId): number {
   return world.landUse[city]?.length ?? 0;
 }
@@ -50,7 +54,7 @@ export function plotsTaken(world: WorldState, city: MarketId): number {
 /** City prosperity: a bigger, richer city has dearer land. */
 export function prosperity(world: WorldState, city: MarketId): number {
   const def = CITY_DEFS[city];
-  const pop = city === 'nearhaven' ? world.population : world.cities[city]?.population ?? def.population;
+  const pop = cityPopulation(world, city);
   const purse = Math.max(1, world.markets[city].treasury);
   const raw = Math.pow(pop / def.population, 0.5) * Math.pow(purse / (def.treasury * 2), 0.15);
   return Math.max(0.75, Math.min(1.8, raw));
@@ -83,7 +87,7 @@ export function starterGrant(world: WorldState, p: PlayerState, city: MarketId):
 
 export function freePlot(world: WorldState, city: MarketId): number | undefined {
   const used = world.landUse[city] ?? [];
-  return [...Array(landDef(city).plots).keys()].find((i) => !used.includes(i));
+  return [...Array(plotCount(world, city)).keys()].find((i) => !used.includes(i));
 }
 
 export function takePlot(world: WorldState, city: MarketId, plot: number) {

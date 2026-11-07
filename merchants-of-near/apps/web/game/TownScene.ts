@@ -34,7 +34,11 @@ interface Npc {
   working: boolean;
   label?: Phaser.GameObjects.Text;
   zzz?: number;
+  /** Citizens' daily routine: where they live and work, and what they are doing now. */
+  routine?: { home: Grid; work: Grid; plot?: number; phase: Phase; offset: number };
 }
+type Grid = { gx: number; gy: number };
+type Phase = 'home' | 'commute' | 'work' | 'lunch' | 'leisure' | 'reassigned';
 
 interface PlacedBuilding {
   img: Phaser.GameObjects.Image;
@@ -68,6 +72,7 @@ export class TownScene extends Phaser.Scene {
   private closedSigns = new Map<string, Phaser.GameObjects.Text>();
   private npcs = new Map<string, Npc>();
   private citizens: Npc[] = [];
+  private citizenJobsKey = '';
   private caravan!: Phaser.GameObjects.Image;
   private plotLayer: Phaser.GameObjects.GameObject[] = [];
   private plotKey = '';
@@ -495,17 +500,86 @@ export class TownScene extends Phaser.Scene {
     return iso(7 + Math.random() * 19, 21.5);
   }
 
-  private syncCitizens(population: number) {
-    const target = Math.max(10, Math.min(44, Math.round(population / 12)));
+  /**
+   * Townsfolk scale with the population, plus the workers of player businesses
+   * in town. Each has a home and a workplace and keeps a daily routine.
+   */
+  private syncCitizens(population: number, snap: PublicSnapshot) {
+    const homes: Grid[] = DECOR.filter((d) => d.id !== 'tavern').map((d) => ({ gx: d.gx + 0.5, gy: d.gy + 1.35 }));
+    const jobs: Array<Grid & { plot?: number }> = BUILDINGS.map((b) => ({ gx: b.door.gx + 0.5, gy: b.door.gy + 0.6 }));
+    // One visible worker per hand at player businesses in Nearhaven (a few per site at most).
+    const plotJobs: Array<Grid & { plot: number }> = [];
+    for (const b of snap.businesses) {
+      if ((b.city ?? 'nearhaven') !== 'nearhaven' || !PLOTS[b.plot]) continue;
+      const workers = Math.min(3, b.workers ?? 1);
+      for (let k = 0; k < workers; k++) plotJobs.push({ gx: PLOTS[b.plot].gx + 0.6 + k * 0.45, gy: PLOTS[b.plot].gy + 2.25, plot: b.plot });
+    }
+    const target = Math.max(10, Math.min(44, Math.round(population / 12))) + Math.min(18, plotJobs.length);
+    const key = plotJobs.map((j) => j.plot).join(',');
+    if (key !== this.citizenJobsKey) {
+      // Workplaces changed: reassign the first citizens to the player businesses.
+      this.citizenJobsKey = key;
+      this.citizens.forEach((c, i) => {
+        if (!c.routine) return;
+        const job = i < plotJobs.length ? plotJobs[i] : jobs[i % jobs.length];
+        c.routine.work = { gx: job.gx, gy: job.gy };
+        c.routine.plot = (job as { plot?: number }).plot;
+        c.routine.phase = 'reassigned'; // forces a new route on the next frame
+      });
+    }
     while (this.citizens.length < target) {
-      const p = this.roadPoint();
-      const key = `citizen-${this.citizens.length % 12}`;
-      const sprite = this.add.sprite(p.x, p.y, key, 'idle0').setOrigin(0.5, 37 / 40).setScale(0.88);
-      const c: Npc = { sprite, key, path: [this.roadPoint()], speed: 16 + Math.random() * 14, home: p, wait: Math.random() * 3, anim: 'idle', carrying: Math.random() < 0.3, cheerUntil: 0, workTimer: 0, working: false };
+      const i = this.citizens.length;
+      const home = homes[i % homes.length];
+      const job = i < plotJobs.length ? plotJobs[i] : jobs[i % jobs.length];
+      const p = iso(home.gx, home.gy);
+      const skin = `citizen-${i % 12}`;
+      const sprite = this.add.sprite(p.x, p.y, skin, 'idle0').setOrigin(0.5, 37 / 40).setScale(0.88);
+      const c: Npc = { sprite, key: skin, path: [], speed: 16 + Math.random() * 14, home: p, wait: Math.random() * 3, anim: 'idle', carrying: Math.random() < 0.3, cheerUntil: 0, workTimer: 0, working: false,
+        routine: { home, work: { gx: job.gx, gy: job.gy }, plot: (job as { plot?: number }).plot, phase: 'home', offset: ((i * 37) % 100) / 100 * 1.6 - 0.8 } };
       this.citizens.push(c);
       this.play(c, 'idle');
     }
     while (this.citizens.length > target) this.citizens.pop()!.sprite.destroy();
+  }
+
+  /** What a citizen does at this hour (each keeps a slightly different clock). */
+  private phaseFor(hour: number, offset: number): Phase {
+    const h = (hour + offset + 24) % 24;
+    if (h < 6.2 || h >= 21.8) return 'home';
+    if (h < 8) return 'commute';
+    if (h < 12) return 'work';
+    if (h < 13.2) return 'lunch';
+    if (h < 17) return 'work';
+    return 'leisure';
+  }
+
+  private phaseTarget(c: Npc, ph: Phase, i: number): Grid {
+    const r = c.routine!;
+    if (ph === 'home') return r.home;
+    if (ph === 'commute' || ph === 'work') return r.work;
+    if (ph === 'lunch') {
+      const spots = [{ gx: 13.1, gy: 13.6 }, { gx: 13.1, gy: 16.4 }, { gx: 17.6, gy: 13.4 }, { gx: 17.7, gy: 16.2 }, { gx: 14.6, gy: 17.9 }, { gx: 16.4, gy: 12.8 }];
+      return spots[i % spots.length];
+    }
+    // Evenings: the tavern, the fountain or a stroll on the main road.
+    const evening = [{ gx: 12.2, gy: 18.3 }, { gx: 11.5, gy: 18.4 }, { gx: 18.4, gy: 12.4 }, { gx: 15.5, gy: 20.5 }, { gx: 12.8, gy: 18.1 }];
+    return evening[i % evening.length];
+  }
+
+  /** Walk along the main streets (the two crossing roads) rather than across gardens. */
+  private routeTo(from: { x: number; y: number }, to: Grid) {
+    // Screen → grid.
+    const fgx = (from.y / (TILE_H / 2) + from.x / (TILE_W / 2)) / 2, fgy = (from.y / (TILE_H / 2) - from.x / (TILE_W / 2)) / 2;
+    const pts: Array<[number, number]> = [];
+    const nearH = (gy: number) => Math.abs(gy - 15.5), nearV = (gx: number) => Math.abs(gx - 15.5);
+    const fromOnH = nearH(fgy) <= nearV(fgx), toOnH = nearH(to.gy) <= nearV(to.gx);
+    if (Math.hypot(fgx - to.gx, fgy - to.gy) > 3) {
+      if (fromOnH) pts.push([fgx, 15.5]); else pts.push([15.5, fgy]);
+      if (fromOnH !== toOnH) pts.push([15.5, 15.5]);
+      if (toOnH) pts.push([to.gx, 15.5]); else pts.push([15.5, to.gy]);
+    }
+    pts.push([to.gx + (Math.random() - 0.5) * 0.4, to.gy + (Math.random() - 0.5) * 0.3]);
+    return pts.map(([x, y]) => iso(x, y));
   }
 
   /** Route from a merchant's workplace to the market square along the main roads. */
@@ -646,7 +720,7 @@ export class TownScene extends Phaser.Scene {
       for (const t of this.trees) if (t.oak) t.img.setTint(SEASON_OAK[season]);
       for (const t of this.trees) if (!t.oak) t.img.setTint(season === 'winter' ? 0xdfe8ee : 0xffffff);
     }
-    this.syncCitizens(snap.population);
+    this.syncCitizens(snap.population, snap);
     this.syncMerchants(snap);
     this.syncWealth(snap);
     this.syncPlots(snap);
@@ -1127,13 +1201,36 @@ export class TownScene extends Phaser.Scene {
       npc.label?.setPosition(npc.sprite.x, npc.sprite.y - 40);
       npc.label?.setAlpha(cam.zoom > 0.7 && !this.cinematic && this.director.labels ? 0.92 : 0);
     }
-    for (const c of this.citizens) {
+    this.citizens.forEach((c, i) => {
+      const r = c.routine;
+      if (r) {
+        const ph = this.phaseFor(hour, r.offset);
+        if (ph !== r.phase) {
+          r.phase = ph;
+          c.path = this.routeTo(c.sprite, this.phaseTarget(c, ph, i));
+          c.wait = Math.random() * 1.2;
+          c.carrying = ph === 'commute' && Math.random() < 0.3;
+        }
+      }
       const moving = this.stepNpc(c, dt, false, 1);
-      if (!moving) this.play(c, 'idle');
+      if (!moving) {
+        if (r?.phase === 'work' || r?.phase === 'commute') {
+          // At the workplace: alternate working and catching breath.
+          c.workTimer -= dt;
+          if (c.workTimer <= 0) { c.working = !c.working; c.workTimer = c.working ? 3 + Math.random() * 5 : 1.5 + Math.random() * 2; }
+          this.play(c, c.working ? 'work' : 'idle');
+        } else this.play(c, 'idle');
+        // Mill about a little at lunch and in the evening.
+        if (r && (r.phase === 'lunch' || r.phase === 'leisure') && !c.path.length && c.wait <= 0 && Math.random() < 0.004) {
+          const t = this.phaseTarget(c, r.phase, i);
+          c.path.push(iso(t.gx + (Math.random() - 0.5) * 1.2, t.gy + (Math.random() - 0.5) * 0.8));
+        }
+      }
       c.sprite.setDepth(c.sprite.y);
-      // Citizens head indoors late at night.
-      c.sprite.setAlpha(night > 0.8 ? 0.0 : 1);
-    }
+      // At home for the night, they are indoors.
+      const inside = r ? r.phase === 'home' && !c.path.length : night > 0.8;
+      c.sprite.setAlpha(inside ? Math.max(0, c.sprite.alpha - dt * 1.5) : Math.min(1, c.sprite.alpha + dt * 2));
+    });
   }
 
   /**
@@ -1178,8 +1275,9 @@ export class TownScene extends Phaser.Scene {
         if (npc.path.length === 0) npc.carrying = false;
         npc.wait = npc.path.length ? 0.25 : 0;
       } else {
-        if (npc.path.length === 0) npc.path.push(this.roadPoint());
-        npc.wait = Math.random() * 2.2;
+        // Citizens with a routine stay put once they arrive; the rest wander.
+        if (npc.path.length === 0 && !npc.routine) npc.path.push(this.roadPoint());
+        npc.wait = npc.path.length ? 0.1 : Math.random() * 2.2;
       }
       return npc.path.length > 0 && npc.wait === 0;
     }

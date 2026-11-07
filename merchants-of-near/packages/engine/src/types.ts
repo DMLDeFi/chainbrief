@@ -134,6 +134,17 @@ export interface MerchantState {
   investors: Record<string, number>;
 }
 
+export interface CityState {
+  population: number;
+  /** Change in population over the last day (fraction). */
+  growth: number;
+  popHistory: number[];
+  /** Completed public works, by kind (levels 1–3). */
+  infra: Partial<Record<'roads' | 'granary' | 'markethall' | 'housing' | 'workshops', number>>;
+  /** Funding towards the next level of each project. */
+  projects: Partial<Record<'roads' | 'granary' | 'markethall' | 'housing' | 'workshops', { funded: number; contributors: Record<string, number> }>>;
+}
+
 export interface TradeRoute {
   id: string;
   from: MarketId;
@@ -308,6 +319,8 @@ export interface PlayerState {
   depots: Partial<Record<MarketId, Inventory>>;
   /** Vacant land the player owns (built-on plots belong to their business). */
   land: LandHolding[];
+  /** Gold given to each city's public works. */
+  patronage?: Partial<Record<MarketId, number>>;
   /** Standing shipping orders that keep goods moving between the player's cities. */
   routes: TradeRoute[];
   /** Land tax the player could not pay; vacant land is repossessed if it grows too large. */
@@ -413,8 +426,8 @@ export interface WorldState {
     dayFoodSatisfaction: number;
     lastDayFoodSatisfaction: number;
   };
-  /** Per-city state beyond the exchange (population grows in later phases). */
-  cities: Record<MarketId, { population: number }>;
+  /** Per-city state beyond the exchange: people, public works and their history. */
+  cities: Record<MarketId, CityState>;
   shipments: Record<string, Shipment>;
 }
 

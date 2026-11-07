@@ -15,3 +15,4 @@ export * from './views';
 export * from './cities';
 export * from './logistics';
 export * from './property';
+export * from './civic';
