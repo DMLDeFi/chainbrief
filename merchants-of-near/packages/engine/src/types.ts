@@ -134,6 +134,19 @@ export interface MerchantState {
   investors: Record<string, number>;
 }
 
+export interface TradeRoute {
+  id: string;
+  from: MarketId;
+  to: MarketId;
+  resource: Resource;
+  /** Ship once at least this many units (above `keep`) are waiting. */
+  batch: number;
+  /** Units always left behind at the origin. */
+  keep: number;
+  active: boolean;
+  shipped: number;
+}
+
 export interface LandHolding {
   city: MarketId;
   plot: number;
@@ -141,7 +154,14 @@ export interface LandHolding {
   tick: number;
 }
 
-export type BusinessKind = 'farm' | 'bakery' | 'blacksmith' | 'textile' | 'warehouse' | 'trading';
+export type BusinessKind =
+  | 'farm' | 'ranch' | 'fishery' | 'lumbercamp'
+  | 'mine' | 'quarry'
+  | 'bakery' | 'mill' | 'brewery'
+  | 'blacksmith' | 'textile' | 'sawmill' | 'foundry' | 'carpenter'
+  | 'shop'
+  | 'warehouse' | 'trading';
+export type Industry = 'agriculture' | 'resources' | 'food' | 'manufacturing' | 'retail' | 'logistics';
 
 export interface BusinessDaily {
   day: number;
@@ -167,8 +187,12 @@ export interface Business {
     supplyFromStore?: boolean;
     autoSell: boolean;
     minSellPrice: number;
-    /** For blacksmith: which product to craft. */
+    /** For blacksmith: which product to craft; for a shop: which good it retails. */
     product?: Resource;
+    /** Which of the business's recipes to run (by name); defaults to the first. */
+    recipe?: string;
+    /** Move finished goods into the owner's store in this city when not auto-selling. */
+    autoCollect?: boolean;
   };
   today: { revenue: number; expenses: number; produced: number };
   totals: { revenue: number; expenses: number; produced: number };
@@ -188,7 +212,7 @@ export interface Business {
   /** Built on the guild's free starter plot (no land tax, no land to sell). */
   starterGrant?: boolean;
   /** Why production is paused, for the owner's dashboard. */
-  idle?: 'inputs-too-dear' | 'no-inputs' | 'full' | null;
+  idle?: 'inputs-too-dear' | 'no-inputs' | 'full' | 'store-full' | null;
   /** Trading company caravan state. */
   caravan?: { to: MarketId; arriveTick: number; cargo: Inventory; costBasis: number };
 }
@@ -284,6 +308,8 @@ export interface PlayerState {
   depots: Partial<Record<MarketId, Inventory>>;
   /** Vacant land the player owns (built-on plots belong to their business). */
   land: LandHolding[];
+  /** Standing shipping orders that keep goods moving between the player's cities. */
+  routes: TradeRoute[];
   /** Land tax the player could not pay; vacant land is repossessed if it grows too large. */
   taxArrears: number;
 }

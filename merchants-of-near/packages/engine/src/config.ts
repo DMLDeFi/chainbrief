@@ -15,6 +15,12 @@ export const RESOURCES = [
   'fish',
   'cloth',
   'weapons',
+  // Processed goods (industry phase): each is made from the goods above.
+  'flour',
+  'planks',
+  'steel',
+  'ale',
+  'furniture',
 ] as const;
 export type Resource = (typeof RESOURCES)[number];
 
@@ -33,7 +39,7 @@ export interface ResourceDef {
   /** Starting stock in each market. */
   /** Opening stock in the two original markets; other cities derive theirs from their regional profile. */
   initialStock: Record<'nearhaven' | 'aurora', number>;
-  category: 'raw' | 'food' | 'crafted';
+  category: 'raw' | 'food' | 'crafted' | 'processed';
   description: string;
 }
 
@@ -49,6 +55,11 @@ export const RESOURCE_DEFS: Record<Resource, ResourceDef> = {
   fish: { label: 'Fish', basePrice: 6, refStock: 100, elasticity: 0.85, initialStock: { nearhaven: 100, aurora: 260 }, category: 'food', description: 'Fresh catch from the river and the sea.' },
   cloth: { label: 'Cloth', basePrice: 14, refStock: 60, elasticity: 0.7, initialStock: { nearhaven: 60, aurora: 110 }, category: 'crafted', description: 'Woven wool and linen for garments and sails.' },
   weapons: { label: 'Weapons', basePrice: 45, refStock: 25, elasticity: 0.8, initialStock: { nearhaven: 25, aurora: 8 }, category: 'crafted', description: 'Swords and spears for the town guard and caravans.' },
+  flour: { label: 'Flour', basePrice: 5, refStock: 120, elasticity: 0.75, initialStock: { nearhaven: 90, aurora: 50 }, category: 'processed', description: 'Wheat ground at the mill. Bakers get half as much bread again from flour as from raw grain.' },
+  planks: { label: 'Planks', basePrice: 6.5, refStock: 100, elasticity: 0.65, initialStock: { nearhaven: 80, aurora: 100 }, category: 'processed', description: 'Sawn timber for carpenters, shipwrights and builders.' },
+  steel: { label: 'Steel', basePrice: 34, refStock: 30, elasticity: 0.75, initialStock: { nearhaven: 18, aurora: 20 }, category: 'processed', description: 'Iron refined with coal in a foundry. Smiths make twice the tools from it.' },
+  ale: { label: 'Ale', basePrice: 11, refStock: 70, elasticity: 0.8, initialStock: { nearhaven: 50, aurora: 60 }, category: 'processed', description: 'Brewed from wheat. Every tavern, wedding and festival wants it.' },
+  furniture: { label: 'Furniture', basePrice: 36, refStock: 25, elasticity: 0.8, initialStock: { nearhaven: 14, aurora: 18 }, category: 'processed', description: 'Tables, beds and chests from planks and cloth. The capital’s households pay well.' },
 };
 
 export const MARKET_DEFS: Record<MarketId, { name: string; fee: number; description: string }> = {
@@ -112,18 +123,21 @@ export const CITIZEN_DEMAND: Partial<Record<Resource, number>> = {
   stone: 0.07,
   coal: 0.05,
   wheat: 0.04,
+  ale: 0.08,
+  planks: 0.03,
+  furniture: 0.006,
 };
 
 /** Seasonal multipliers on citizen demand. */
 export const SEASONAL_DEMAND: Record<Season, Partial<Record<Resource, number>>> = {
   spring: { tools: 1.2, stone: 1.2 },
   summer: { fish: 1.15, stone: 1.3 },
-  autumn: { bread: 1.1, cloth: 1.15 },
+  autumn: { bread: 1.1, cloth: 1.15, ale: 1.3 },
   winter: { wood: 1.8, coal: 1.7, cloth: 1.3, fish: 0.8 },
 };
 
 /** Port Aurora is modelled as a regional economy with exogenous flows (units/tick). */
-export const AURORA_FLOWS: Record<Resource, { produce: number; consume: number }> = {
+export const AURORA_FLOWS: Partial<Record<Resource, { produce: number; consume: number }>> = {
   wheat: { produce: 0.6, consume: 1.4 },
   bread: { produce: 0.2, consume: 0.9 },
   wood: { produce: 1.0, consume: 0.9 },

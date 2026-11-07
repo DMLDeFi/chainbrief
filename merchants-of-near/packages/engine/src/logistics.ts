@@ -1,5 +1,5 @@
 import { MARKETS, RESOURCE_DEFS, RESOURCES, type MarketId, type Resource } from './config';
-import type { Inventory, PlayerState, Result, Shipment, WorldState } from './types';
+import type { Inventory, PlayerState, Result, Shipment, TradeRoute, WorldState } from './types';
 import { addInv, fail, fmt, invTotal, money, newId, ok, pushFeed } from './internal';
 import { CITY_DEFS, findPath, freightCost, travelTicks } from './cities';
 import { createMarket } from './market';
@@ -94,6 +94,60 @@ export function shipGoods(world: WorldState, playerId: string, req: { from: unkn
   return ok(s);
 }
 
+export const MAX_ROUTES = 12;
+
+/** Set up a standing order: whenever `batch` units (beyond `keep`) wait in `from`, ship them to `to`. */
+export function addRoute(world: WorldState, playerId: string, req: { from: unknown; to: unknown; resource: unknown; batch: unknown; keep?: unknown }): Result<TradeRoute> {
+  const p = world.players[playerId];
+  if (!p) return fail('Unknown player');
+  if (!isCity(req.from) || !isCity(req.to)) return fail('Unknown city');
+  if (req.from === req.to) return fail('Choose two different cities');
+  if (!(RESOURCES as readonly string[]).includes(req.resource as string)) return fail('Unknown resource');
+  for (const c of [req.from, req.to]) if (!hasAccess(p, c)) return fail(`Open a trading office in ${CITY_DEFS[c].name} first`);
+  const batch = Number(req.batch), keep = Number(req.keep ?? 0);
+  if (!Number.isInteger(batch) || batch < 5 || batch > 500) return fail('Batch must be a whole number from 5 to 500');
+  if (!Number.isInteger(keep) || keep < 0 || keep > 5000) return fail('Keep must be a whole number from 0 to 5000');
+  p.routes ??= [];
+  if (p.routes.length >= MAX_ROUTES) return fail(`You can run at most ${MAX_ROUTES} standing orders`);
+  const route: TradeRoute = { id: newId(world, 'route'), from: req.from, to: req.to, resource: req.resource as Resource, batch, keep, active: true, shipped: 0 };
+  p.routes.push(route);
+  return ok(route);
+}
+
+export function removeRoute(world: WorldState, playerId: string, routeId: unknown): Result<{ id: string }> {
+  const p = world.players[playerId];
+  if (!p) return fail('Unknown player');
+  const i = (p.routes ?? []).findIndex((r) => r.id === routeId);
+  if (i < 0) return fail('Standing order not found');
+  p.routes.splice(i, 1);
+  return ok({ id: String(routeId) });
+}
+
+export function toggleRoute(world: WorldState, playerId: string, routeId: unknown, active: unknown): Result<TradeRoute> {
+  const p = world.players[playerId];
+  const r = p?.routes?.find((x) => x.id === routeId);
+  if (!r) return fail('Standing order not found');
+  r.active = !!active;
+  return ok(r);
+}
+
+/** Run standing orders every few hours. A shipment that cannot go (no room, no freight money) simply waits. */
+export function processRoutes(world: WorldState): void {
+  if (world.tick % 4 !== 2) return;
+  for (const p of Object.values(world.players)) {
+    for (const route of p.routes ?? []) {
+      if (!route.active) continue;
+      const avail = Math.floor((storeFor(p, route.from)[route.resource] ?? 0) - route.keep);
+      if (avail < route.batch) continue;
+      let qty = Math.min(avail, 500);
+      if (route.to !== 'nearhaven') qty = Math.min(qty, Math.floor(depotCapacity(p, route.to, world) - invTotal(storeFor(p, route.to)) - incoming(world, p.id, route.to)));
+      if (qty < route.batch) continue;
+      const s = shipGoods(world, p.id, { from: route.from, to: route.to, resource: route.resource, qty });
+      if (s.ok) route.shipped += qty;
+    }
+  }
+}
+
 /** Deliver shipments whose arrival time has come. */
 export function processShipments(world: WorldState): void {
   for (const s of Object.values(world.shipments)) {
@@ -118,6 +172,19 @@ export function migrateWorld(world: WorldState): WorldState {
     world.reported ??= {} as WorldState['reported'];
     if (!world.reported[id]) world.reported[id] = { price: { ...world.markets[id].price }, stock: { ...world.markets[id].stock } };
   }
+  // Goods added after a save was made get an opening stock in every exchange.
+  for (const id of MARKETS) {
+    const m = world.markets[id];
+    const fresh = createMarket(id);
+    for (const r of RESOURCES) {
+      if (m.stock[r] !== undefined) continue;
+      for (const k of ['stock', 'pressure', 'price', 'openPrice', 'history', 'intraday', 'demandRate', 'supplyRate', 'productionRate', 'consumptionRate', 'shortageRate', 'tickBuys', 'tickSells', 'tickProduced', 'tickConsumed', 'tickShortage'] as const) {
+        (m[k] as Record<string, unknown>)[r] = (fresh[k] as Record<string, unknown>)[r];
+      }
+      world.reported[id].price[r] ??= m.price[r];
+      world.reported[id].stock[r] ??= m.stock[r];
+    }
+  }
   world.cities ??= {} as WorldState['cities'];
   for (const id of MARKETS) world.cities[id] ??= { population: id === 'nearhaven' ? world.population : CITY_DEFS[id].population };
   world.shipments ??= {};
@@ -135,6 +202,7 @@ export function migrateWorld(world: WorldState): WorldState {
     p.charters ??= [];
     p.depots ??= {};
     p.land ??= [];
+    p.routes ??= [];
     p.taxArrears ??= 0;
     // The old Port Aurora unlock becomes a proper office with a depot.
     if (p.marketAccess?.includes('aurora') && !p.charters.includes('aurora')) p.charters.push('aurora');

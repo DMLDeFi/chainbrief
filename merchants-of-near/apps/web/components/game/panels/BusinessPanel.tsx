@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { CITY_DEFS, landDef, MARKETS, type BusinessKind, type MarketId, type PublicSnapshot } from '@mon/engine';
+import { CITY_DEFS, INDUSTRIES, INDUSTRY_OF, landDef, MARKETS, RESOURCES, type BusinessKind, type MarketId, type PublicSnapshot } from '@mon/engine';
 import { api, type Me } from '@/lib/api';
 import { BUSINESS_DEFS, LEVELS, RESOURCE_DEFS } from '@/lib/catalog';
 import { useAction } from '@/lib/hooks';
@@ -45,6 +45,7 @@ export function BusinessPanel({ world, me, selection, onClose }: { world: Public
                   <button key={b.id} onClick={() => setFocus(b.id)} className={`w-full rounded-xl border px-3 py-2 text-left ${focus === b.id ? 'border-brass bg-brass/10' : 'border-line/60 bg-black/20 hover:border-brass-deep'}`}>
                     <div className="flex items-center justify-between text-sm font-semibold"><span>{b.def.name}</span><LevelPips level={b.level} max={b.maxLevel} /></div>
                     <div className="num text-[11px] text-muted">{b.workers} workers · {last ? <span className={last.profit >= 0 ? 'text-moss' : 'text-ember'}>{last.profit >= 0 ? '+' : ''}{gold(last.profit)}g yesterday</span> : 'new'}</div>
+                    {b.idle && <div className="text-[10px] font-semibold uppercase tracking-wide text-ember">⚠ {b.idle === 'inputs-too-dear' ? 'inputs too dear' : b.idle === 'no-inputs' ? 'nothing to sell' : b.idle === 'store-full' ? 'store full' : 'stock full'}</div>}
                     {b.deedTokenId && <Badge tone="near">deed on NEAR</Badge>}
                   </button>
                 );
@@ -75,6 +76,7 @@ export function LevelPips({ level, max }: { level: number; max: number }) {
 
 function fitLabel(a: number) {
   if (a === 1) return null;
+  if (a <= 0) return <Badge tone="ember">not possible here</Badge>;
   const pct = Math.round(Math.abs(a - 1) * 100);
   return <Badge tone={a > 1 ? 'moss' : 'ember'}>{a > 1 ? `+${pct}% here` : `−${pct}% here`}</Badge>;
 }
@@ -114,11 +116,15 @@ function Catalog({ me, world, onBought }: { me: Me; world: PublicSnapshot; onBou
             {quotes.farm.grant && ' The guild grants your first Nearhaven plot for free.'}
             {quotes.farm.ownLand && ' You own a vacant plot here, so you only pay for the building.'}
           </p>
+          {INDUSTRIES.map((ind) => (
+          <div key={ind.id} className="mb-4">
+          <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-brass">{ind.label}</div>
           <div className="grid gap-2.5 sm:grid-cols-2">
-            {(Object.keys(BUSINESS_DEFS) as BusinessKind[]).map((k) => {
+            {(Object.keys(BUSINESS_DEFS) as BusinessKind[]).filter((k) => INDUSTRY_OF[k] === ind.id).map((k) => {
               const d = BUSINESS_DEFS[k];
               const q = quotes[k];
-              const locked = p.level < d.requiredLevel;
+              const impossible = q.affinity <= 0;
+              const locked = p.level < d.requiredLevel || impossible;
               const recipe = d.recipes[0];
               return (
                 <div key={k} className={`rounded-xl border p-3.5 ${locked ? 'border-line/40 bg-black/10 opacity-70' : 'border-line/70 bg-black/20'}`}>
@@ -131,6 +137,7 @@ function Catalog({ me, world, onBought }: { me: Me; world: PublicSnapshot; onBou
                     {fitLabel(q.affinity)}
                   </div>
                   <p className="mt-1 text-xs leading-snug text-muted">{d.description}</p>
+                  {d.recipes.length > 1 && <div className="mt-1 text-[11px] text-river">{d.recipes.length} recipes: {d.recipes.map((x) => x.name).join(' · ')}</div>}
                   {recipe && (
                     <div className="mt-2 flex items-center gap-1.5 text-[11px] text-parchment-dim">
                       {Object.entries(recipe.inputs).map(([r, n]) => <span key={r} className="flex items-center gap-0.5">{n}<ResourceIcon r={r} size={14} /></span>)}
@@ -140,12 +147,14 @@ function Catalog({ me, world, onBought }: { me: Me; world: PublicSnapshot; onBou
                   )}
                   <div className="mt-2 text-[11px] text-muted">Wage {gold(d.wage * ld.wages)}g/worker/day · upkeep {d.upkeep}g × level</div>
                   <button disabled={busy || locked || p.gold < q.total || q.plotsFree <= 0} onClick={async () => { const b = await run<{ id: string }>({ type: 'business.buy', kind: k, city }, `${d.name} opened in ${CITY_DEFS[city].name}!`); if (b) onBought(b.id); }} className="btn btn-gold mt-3 w-full py-1.5 text-sm">
-                    {locked ? `Requires Lv ${d.requiredLevel} · ${LEVELS[d.requiredLevel - 1].title}` : q.plotsFree <= 0 ? 'No plots left here' : p.gold < q.total ? `Need ${gold(q.total)}g` : `Build in ${CITY_DEFS[city].name}`}
+                    {impossible ? `Not possible in ${CITY_DEFS[city].name}` : locked ? `Requires Lv ${d.requiredLevel} · ${LEVELS[d.requiredLevel - 1].title}` : q.plotsFree <= 0 ? 'No plots left here' : p.gold < q.total ? `Need ${gold(q.total)}g` : `Build in ${CITY_DEFS[city].name}`}
                   </button>
                 </div>
               );
             })}
           </div>
+          </div>
+          ))}
         </>
       )}
     </div>
@@ -204,7 +213,8 @@ function Detail({ b, me, world }: { b: OwnedBiz; me: Me; world: PublicSnapshot }
   const h = b.history.slice(-20);
   const profit = b.totals.revenue - b.totals.expenses;
   const used = Object.values(b.inventory).reduce((s, q) => s + (q ?? 0), 0);
-  const out = (b.def.recipes.find((r) => r.name === (b.policy.product ?? r.name)) ?? b.def.recipes[0])?.outputs;
+  const recipe = b.def.recipes.find((r) => r.name === b.policy.recipe) ?? (b.kind === 'blacksmith' ? b.def.recipes.find((r) => r.name === (b.policy.product ?? 'tools')) : undefined) ?? b.def.recipes[0];
+  const out = recipe?.outputs;
   const suspended = !!b.chainOwner && b.chainOwner !== me.user.nearAccountId;
 
   const claimDeed = async () => {
@@ -238,13 +248,14 @@ function Detail({ b, me, world }: { b: OwnedBiz; me: Me; world: PublicSnapshot }
         </div>
       </div>
       {b.idle === 'inputs-too-dear' && <p className="rounded-lg border border-ember/40 bg-ember/10 px-3 py-2 text-xs text-[#f0b8a0]">Paused buying: inputs on the {world.markets[b.city].name} cost more than the output is worth. Ship cheaper inputs into your {CITY_DEFS[b.city].name} {b.city === 'nearhaven' ? 'warehouse' : 'depot'}, turn off auto-sell to sell elsewhere, or dismiss workers to save wages.</p>}
-      {b.idle === 'full' && <p className="rounded-lg border border-line/60 bg-black/20 px-3 py-2 text-xs text-muted">Stock is full: collect goods or enable auto-sell.</p>}
+      {b.idle === 'full' && <p className="rounded-lg border border-ember/40 bg-ember/10 px-3 py-2 text-xs text-[#f0b8a0]">Production stopped: the stock room is full. Collect goods, turn on auto-sell, or upgrade for more capacity.</p>}
+      {b.idle === 'store-full' && <p className="rounded-lg border border-ember/40 bg-ember/10 px-3 py-2 text-xs text-[#f0b8a0]">Production stopped: your {CITY_DEFS[b.city].name} {b.city === 'nearhaven' ? 'warehouse' : 'depot'} is full, so output cannot be collected. Ship goods out with a standing order, build a warehouse here, or turn on auto-sell.</p>}
       {suspended && <p className="rounded-lg border border-ember/40 bg-ember/10 px-3 py-2 text-xs text-[#f0b8a0]">The deed is held on-chain by {b.chainOwner}. Production pauses until the deed holder plays.</p>}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat label="Lifetime P/L" value={<span className={profit >= 0 ? 'text-moss' : 'text-ember'}>{gold(profit)}</span>} sub={`incl. ${gold(b.purchasePrice + (b.landCost ?? 0))}g to open`} />
         <Stat label="Revenue" value={gold(b.totals.revenue)} />
         <Stat label="Expenses" value={gold(b.totals.expenses)} />
-        <Stat label="Produced" value={b.totals.produced.toFixed(0)} sub={out ? Object.keys(out).join(', ') : 'storage & rent'} />
+        <Stat label={b.kind === 'shop' ? 'Sold' : 'Produced'} value={b.totals.produced.toFixed(0)} sub={b.kind === 'shop' ? `${b.policy.product ?? 'goods'} sold` : out ? Object.keys(out).join(', ') : 'storage & rent'} />
       </div>
       {h.length > 1 && (
         <div className="panel p-3">
@@ -277,7 +288,7 @@ function Detail({ b, me, world }: { b: OwnedBiz; me: Me; world: PublicSnapshot }
           <button disabled={busy || used < 1} onClick={() => run({ type: 'business.collect', businessId: b.id }, b.city === 'nearhaven' ? 'Goods moved to your warehouse' : `Goods moved to your ${CITY_DEFS[b.city].name} depot`)} className="btn btn-ghost mt-3 w-full py-1.5 text-sm">{b.city === 'nearhaven' ? 'Collect to warehouse' : `Collect to ${CITY_DEFS[b.city].name} depot`}</button>
           {b.def.recipes.length > 0 && (
             <div className="mt-3 space-y-2 text-xs">
-              <label className="flex items-center justify-between"><span>Use my stock in {CITY_DEFS[b.city].name} first</span><input type="checkbox" checked={!!b.policy.supplyFromStore} onChange={(e) => run({ type: 'business.policy', businessId: b.id, policy: { supplyFromStore: e.target.checked } })} /></label>
+              <label className="flex items-center justify-between"><span>Use my stock in {CITY_DEFS[b.city].name} first (my other businesses here, then my store)</span><input type="checkbox" checked={!!b.policy.supplyFromStore} onChange={(e) => run({ type: 'business.policy', businessId: b.id, policy: { supplyFromStore: e.target.checked } })} /></label>
               <label className="flex items-center justify-between"><span>Auto-buy inputs (only while profitable)</span><input type="checkbox" checked={b.policy.autoBuyInputs} onChange={(e) => run({ type: 'business.policy', businessId: b.id, policy: { autoBuyInputs: e.target.checked } })} /></label>
               <label className="flex items-center justify-between"><span>Auto-sell output</span><input type="checkbox" checked={b.policy.autoSell} onChange={(e) => run({ type: 'business.policy', businessId: b.id, policy: { autoSell: e.target.checked } })} /></label>
               <div className="flex items-center gap-2">
@@ -285,19 +296,21 @@ function Detail({ b, me, world }: { b: OwnedBiz; me: Me; world: PublicSnapshot }
                 <input className="input num !py-1" type="number" step="0.1" min={0} value={minPrice} onChange={(e) => setMinPrice(Number(e.target.value))} />
                 <button className="btn btn-ghost px-2 py-1" onClick={() => run({ type: 'business.policy', businessId: b.id, policy: { minSellPrice: minPrice } }, 'Floor price set')}>Set</button>
               </div>
-              {b.kind === 'blacksmith' && (
-                <div className="flex items-center justify-between">
-                  <span>Forge</span>
-                  <select className="input !w-32 !py-1" value={b.policy.product} onChange={(e) => run({ type: 'business.policy', businessId: b.id, policy: { product: e.target.value } })}>
-                    <option value="tools">Tools</option><option value="weapons">Weapons</option>
+              {b.def.recipes.length > 1 && (
+                <div className="flex items-center justify-between gap-2">
+                  <span>Recipe</span>
+                  <select className="input !w-48 !py-1" value={recipe?.name} onChange={(e) => run({ type: 'business.policy', businessId: b.id, policy: { recipe: e.target.value } })}>
+                    {b.def.recipes.map((rc) => <option key={rc.name} value={rc.name}>{rc.name} — {Object.entries(rc.inputs).map(([r, q]) => `${q} ${r}`).join(' + ') || 'no inputs'} → {Object.entries(rc.outputs).map(([r, q]) => `${q} ${r}`).join(', ')}</option>)}
                   </select>
                 </div>
               )}
+              {!b.policy.autoSell && <label className="flex items-center justify-between"><span>Auto-collect output to my {CITY_DEFS[b.city].name} store</span><input type="checkbox" checked={!!b.policy.autoCollect} onChange={(e) => run({ type: 'business.policy', businessId: b.id, policy: { autoCollect: e.target.checked } })} /></label>}
               {out && <div className="text-muted">Market price of output: {Object.keys(out).map((r) => `${RESOURCE_DEFS[r as keyof typeof RESOURCE_DEFS].label} ${gold(world.markets[b.city].resources[r as keyof typeof RESOURCE_DEFS].price)}g in ${CITY_DEFS[b.city].name}`).join(', ')}</div>}
             </div>
           )}
         </div>
       </div>
+      {b.kind === 'shop' && <ShopBox b={b} world={world} />}
       <SellBox b={b} />
       <div className="rounded-xl border border-near/30 bg-near/5 p-4">
         <div className="flex items-center justify-between gap-3">
@@ -341,6 +354,24 @@ function SellBox({ b }: { b: OwnedBiz }) {
           <button disabled={busy || !!b.caravan} onClick={() => setConfirm(true)} className="btn btn-ghost px-3 py-1.5 text-sm">Sell to local investors · {gold(offer)}g</button>
         )}
       </div>
+    </div>
+  );
+}
+
+function ShopBox({ b, world }: { b: OwnedBiz; world: PublicSnapshot }) {
+  const { run, busy } = useAction();
+  const m = world.markets[b.city];
+  return (
+    <div className="panel p-4 text-xs">
+      <div className="label mb-2">What this shop sells</div>
+      <div className="flex flex-wrap items-center gap-2">
+        <select disabled={busy} className="input !w-44 !py-1" value={b.policy.product ?? ''} onChange={(e) => run({ type: 'business.policy', businessId: b.id, policy: { product: e.target.value } }, 'Shop restocked')}>
+          <option value="" disabled>Choose a good…</option>
+          {RESOURCES.map((r) => <option key={r} value={r}>{RESOURCE_DEFS[r].label} · {gold(m.resources[r].price)}g here</option>)}
+        </select>
+        <span className="text-muted">Restocks from your {CITY_DEFS[b.city].name} {b.city === 'nearhaven' ? 'warehouse' : 'depot'} and sells over the counter for the exchange price plus {Math.round((0.12 + 0.02 * (b.level - 1)) * 100)}% paid by households. Ship goods in with a standing order (Inventory panel).</span>
+      </div>
+      {b.idle === 'no-inputs' && <p className="mt-2 text-ember">Nothing to sell: your store here has none of this good.</p>}
     </div>
   );
 }

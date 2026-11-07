@@ -191,6 +191,28 @@ describe('authoritative actions', () => {
     expect((await act(cookie, { type: 'land.buy', city: 'atlantis' })).statusCode).toBe(400);
   });
 
+  it('builds new industries, picks recipes and runs standing shipping orders', async () => {
+    const { cookie } = await register();
+    const id = (await ctx.app.inject({ method: 'GET', url: '/api/me', headers: { cookie } })).json().player.id;
+    Object.assign(ctx.game.world.players[id], { gold: 5000, level: 5 });
+    expect((await act(cookie, { type: 'business.buy', kind: 'spaceport' })).statusCode).toBe(400);
+    const bakery = await act(cookie, { type: 'business.buy', kind: 'bakery' });
+    expect(bakery.statusCode).toBe(200);
+    expect((await act(cookie, { type: 'business.policy', businessId: bakery.json().data.id, policy: { recipe: 'bread from flour', autoCollect: true } })).statusCode).toBe(200);
+    expect((await act(cookie, { type: 'business.policy', businessId: bakery.json().data.id, policy: { recipe: 'cake' } })).statusCode).toBe(422);
+    expect((await act(cookie, { type: 'business.buy', kind: 'mill' })).statusCode).toBe(200);
+    expect((await act(cookie, { type: 'city.charter', city: 'goldenvale' })).statusCode).toBe(200);
+    const route = await act(cookie, { type: 'route.add', from: 'goldenvale', to: 'nearhaven', resource: 'flour', batch: 20 });
+    expect(route.statusCode, route.body).toBe(200);
+    expect((await act(cookie, { type: 'route.add', from: 'goldenvale', to: 'nearhaven', resource: 'flour', batch: 1 })).statusCode).toBe(400);
+    let me = (await ctx.app.inject({ method: 'GET', url: '/api/me', headers: { cookie } })).json();
+    expect(me.player.routes).toHaveLength(1);
+    expect((await act(cookie, { type: 'route.toggle', routeId: route.json().data.id, active: false })).statusCode).toBe(200);
+    expect((await act(cookie, { type: 'route.remove', routeId: route.json().data.id })).statusCode).toBe(200);
+    me = (await ctx.app.inject({ method: 'GET', url: '/api/me', headers: { cookie } })).json();
+    expect(me.player.routes).toHaveLength(0);
+  });
+
   it('records every gold movement in the ledger', async () => {
     const { cookie } = await register();
     await act(cookie, { type: 'trade', side: 'buy', resource: 'wheat', qty: 3 });

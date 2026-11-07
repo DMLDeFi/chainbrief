@@ -45,6 +45,7 @@ export function InventoryPanel({ world, me, onClose, onOpen }: { world: PublicSn
       </div>
 
       <CityStores world={world} me={me} />
+      <StandingOrders me={me} />
 
       <h3 className="display mt-6 text-base font-bold">Loans</h3>
       {p.loans.length === 0 ? (
@@ -163,5 +164,49 @@ function CityStores({ world, me }: { world: PublicSnapshot; me: Me }) {
         <button disabled={busy || from === to || qty > have || p.gold < cost} onClick={() => run({ type: 'ship', from, to, resource: r, qty }, `Shipment of ${qty} ${r} is on its way to ${CITY_DEFS[to].name}`)} className="btn btn-gold mt-2 w-full py-1.5 text-sm">Send shipment</button>
       </div>
     </>
+  );
+}
+
+/** Standing shipping orders: keep a supply chain running without shipping by hand. */
+function StandingOrders({ me }: { me: Me }) {
+  const p = me.player;
+  const { run, busy } = useAction();
+  const places: MarketId[] = MARKETS.filter((c) => c === 'nearhaven' || p.charters.includes(c) || p.marketAccess.includes(c));
+  const [from, setFrom] = useState<MarketId>(places[1] ?? 'nearhaven');
+  const [to, setTo] = useState<MarketId>('nearhaven');
+  const [r, setR] = useState<Resource>('flour');
+  const [batch, setBatch] = useState(20);
+  const [keep, setKeep] = useState(0);
+  const path = from !== to ? findPath(from, to) : null;
+  if (places.length < 2) return null;
+  return (
+    <div className="mt-5">
+      <h3 className="display mb-1 font-bold">Standing orders</h3>
+      <p className="mb-2 text-xs text-muted">Every few hours, whenever a full batch is waiting in the origin store (above what you keep), it is shipped automatically and freight is paid. Pair with “auto-collect” on a business and “use my stock first” on the next one to run a whole supply chain.</p>
+      {p.routes.length > 0 && (
+        <div className="mb-3 space-y-1.5">
+          {p.routes.map((rt) => (
+            <div key={rt.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-line/60 bg-black/20 px-3 py-2 text-xs">
+              <ResourceIcon r={rt.resource} size={16} />
+              <span className="font-semibold">{RESOURCE_DEFS[rt.resource].label}</span>
+              <span className="text-parchment-dim">{CITY_DEFS[rt.from].name} → {CITY_DEFS[rt.to].name}</span>
+              <span className="text-muted">batches of {rt.batch}{rt.keep ? `, keep ${rt.keep}` : ''} · shipped {rt.shipped}</span>
+              <span className="flex-1" />
+              <button disabled={busy} onClick={() => run({ type: 'route.toggle', routeId: rt.id, active: !rt.active }, rt.active ? 'Order paused' : 'Order resumed')} className="btn btn-ghost px-2 py-0.5 text-[11px]">{rt.active ? 'Pause' : 'Resume'}</button>
+              <button disabled={busy} onClick={() => run({ type: 'route.remove', routeId: rt.id }, 'Order cancelled')} className="btn btn-ghost px-2 py-0.5 text-[11px]">Cancel</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
+        <select className="input !py-1 text-xs" value={from} onChange={(e) => setFrom(e.target.value as MarketId)} aria-label="From">{places.map((c) => <option key={c} value={c}>from {CITY_DEFS[c].name}</option>)}</select>
+        <select className="input !py-1 text-xs" value={to} onChange={(e) => setTo(e.target.value as MarketId)} aria-label="To">{places.map((c) => <option key={c} value={c}>to {CITY_DEFS[c].name}</option>)}</select>
+        <select className="input !py-1 text-xs" value={r} onChange={(e) => setR(e.target.value as Resource)} aria-label="Good">{RESOURCES.map((x) => <option key={x} value={x}>{RESOURCE_DEFS[x].label}</option>)}</select>
+        <input className="input num !py-1 text-xs" type="number" min={5} max={500} value={batch} onChange={(e) => setBatch(Number(e.target.value))} aria-label="Batch" title="Batch size" />
+        <input className="input num !py-1 text-xs" type="number" min={0} max={5000} value={keep} onChange={(e) => setKeep(Number(e.target.value))} aria-label="Keep" title="Units to keep" />
+        <button disabled={busy || from === to || !path} onClick={() => run({ type: 'route.add', from, to, resource: r, batch, keep }, 'Standing order set')} className="btn btn-gold py-1 text-xs">Add order</button>
+      </div>
+      {path && <p className="mt-1 text-[11px] text-muted">{path.hours}h by {path.cities.map((c) => CITY_DEFS[c].name).join(' → ')} · freight {gold(freightCost(from, to, batch))}g per batch of {batch}</p>}
+    </div>
   );
 }

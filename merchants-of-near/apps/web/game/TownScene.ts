@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import type { FeedEntry, PublicSnapshot } from '@mon/engine';
+import { BUSINESS_DEFS, type FeedEntry, type PublicSnapshot } from '@mon/engine';
 import { BUILDINGS, DECOR, MAP, PLOTS, TILE_H, TILE_W, hash2, iso, tileKind, type BuildingDef } from './layout';
 import { makeTileTextures, makeTreeTextures } from './textures';
 import { SPECS, drawBuilding, houseSpec, type BuildingArt } from './art/buildings';
@@ -347,7 +347,8 @@ export class TownScene extends Phaser.Scene {
     });
     // Pre-render player building styles at each level.
     // Each level adds height and windows; level 3 gains a chimney if it had none.
-    for (const kind of ['farm', 'bakery', 'blacksmith', 'textile', 'warehouse', 'trading']) {
+    for (const kind of Object.keys(BUSINESS_DEFS)) {
+      if (!SPECS[`p-${kind}`]) continue;
       for (let lv = 1; lv <= 5; lv++) {
         const base = SPECS[`p-${kind}`];
         if (this.textures.exists(`pb-${kind}-${lv}`)) this.textures.remove(`pb-${kind}-${lv}`);
@@ -809,7 +810,7 @@ export class TownScene extends Phaser.Scene {
       out.push(g);
     }
     if (lv >= 2) {
-      const goods = kind === 'farm' ? 'haystack' : kind === 'bakery' ? 'sack' : kind === 'blacksmith' ? 'crate' : kind === 'textile' ? 'sack' : 'barrel';
+      const goods = ({ farm: 'haystack', ranch: 'haystack', mill: 'sack', bakery: 'sack', textile: 'sack', blacksmith: 'crate', foundry: 'orecart', mine: 'orecart', quarry: 'orecart', lumbercamp: 'logs', sawmill: 'logs', carpenter: 'crate', fishery: 'net', brewery: 'barrel', shop: 'crate' } as Record<string, string>)[kind] ?? 'barrel';
       put(goods, 1.95, 1.55, { scale: 0.8 });
       if (lv >= 3) put(goods === 'barrel' ? 'crate' : 'barrel', 1.7, 2.0, { scale: 0.8 });
     }

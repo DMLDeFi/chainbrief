@@ -11,7 +11,7 @@ import { playerDaily } from './players';
 import { evaluateProgression } from './progression';
 import { createMerchant, MERCHANT_SEEDS } from './seed';
 import { CITY_DEFS } from './cities';
-import { processShipments } from './logistics';
+import { processRoutes, processShipments } from './logistics';
 
 export function createWorld(seed = 20260101): WorldState {
   const markets = Object.fromEntries(MARKETS.map((id) => [id, createMarket(id)])) as WorldState['markets'];
@@ -232,6 +232,7 @@ export function stepWorld(world: WorldState): void {
   citizensConsume(world);
   regionFlows(world);
   processShipments(world);
+  processRoutes(world);
   runMerchants(world);
   for (const b of Object.values(world.businesses)) runBusiness(world, b);
   for (const id of MARKETS) updatePressure(world.markets[id], id === 'nearhaven' ? Object.fromEntries((Object.keys(CITIZEN_DEMAND) as Resource[]).map((r) => [r, citizenBaseDemand(world, r)])) : {});

@@ -1,9 +1,9 @@
-import { ECONOMY, MARKETS, RESOURCE_DEFS, type MarketId, type Recipe, type Resource } from './config';
+import { ECONOMY, MARKETS, RESOURCE_DEFS, RESOURCES, type MarketId, type Recipe, type Resource } from './config';
 import { freightCost, travelTicks } from './cities';
 import { CITY_DEFS } from './cities';
 import { depotCapacity, hasAccess, isCity, storeFor } from './logistics';
 import { affinity, freePlot, landDef, landPrice, landValue, plotsTaken, releasePlot, starterGrant, takePlot } from './property';
-import type { Business, BusinessKind, Result, WorldState } from './types';
+import type { Business, BusinessKind, Industry, Result, WorldState } from './types';
 import { addInv, dayOf, fail, fmt, invTotal, money, newId, ok, pushFeed } from './internal';
 import { maxAffordable, quoteBuy, quoteSell, settleOnMarket } from './market';
 import { productionFactor } from './environment';
@@ -13,6 +13,7 @@ export interface BusinessDef {
   kind: BusinessKind;
   name: string;
   description: string;
+  industry?: Industry;
   price: number;
   /** Player level required to purchase. */
   requiredLevel: number;
@@ -30,6 +31,7 @@ export interface BusinessDef {
 }
 
 const EFF = [1, 1.2, 1.45, 1.7, 2.0];
+const W5 = [2, 4, 6, 8, 10];
 export const MAX_BUSINESS_LEVEL = 5;
 /** Player level needed before a business can be raised to each level (index = target level). */
 export const UPGRADE_LEVEL_REQ = [0, 0, 0, 0, 3, 5];
@@ -44,7 +46,10 @@ export const BUSINESS_DEFS: Record<BusinessKind, BusinessDef> = {
   bakery: {
     kind: 'bakery', name: 'Bakery', description: 'Bakes 2 bread from every 3 wheat. Citizens eat bread every day.',
     price: 190, requiredLevel: 2,
-    recipes: [{ name: 'bread', inputs: { wheat: 3 }, outputs: { bread: 2 }, ratePerWorker: 0.14 }],
+    recipes: [
+      { name: 'bread', inputs: { wheat: 3 }, outputs: { bread: 2 }, ratePerWorker: 0.14 },
+      { name: 'bread from flour', inputs: { flour: 2 }, outputs: { bread: 3 }, ratePerWorker: 0.14 },
+    ],
     wage: 5, upkeep: 3, maxWorkers: [2, 4, 6, 8, 10], capacity: [60, 120, 200, 300, 420], efficiency: EFF, upgradeCost: [200, 420, 800, 1400],
   },
   textile: {
@@ -59,6 +64,8 @@ export const BUSINESS_DEFS: Record<BusinessKind, BusinessDef> = {
     recipes: [
       { name: 'tools', inputs: { iron: 1, coal: 1, wood: 0.5 }, outputs: { tools: 1 }, ratePerWorker: 0.04 },
       { name: 'weapons', inputs: { iron: 2, coal: 1 }, outputs: { weapons: 1 }, ratePerWorker: 0.028 },
+      { name: 'tools from steel', inputs: { steel: 1, planks: 0.5 }, outputs: { tools: 2 }, ratePerWorker: 0.04 },
+      { name: 'weapons from steel', inputs: { steel: 1, wood: 0.5 }, outputs: { weapons: 1.5 }, ratePerWorker: 0.028 },
     ],
     wage: 7, upkeep: 5, maxWorkers: [2, 4, 6, 8, 10], capacity: [40, 80, 140, 210, 300], efficiency: EFF, upgradeCost: [380, 700, 1300, 2300],
   },
@@ -75,7 +82,95 @@ export const BUSINESS_DEFS: Record<BusinessKind, BusinessDef> = {
     recipes: [],
     wage: 6, upkeep: 6, maxWorkers: [2, 3, 4, 5, 6], capacity: [40, 70, 110, 160, 220], efficiency: [1, 1.15, 1.3, 1.45, 1.6], upgradeCost: [500, 900, 1500, 2500],
   },
+  // ---- Agriculture
+  ranch: {
+    kind: 'ranch', name: 'Ranch', description: 'Raises cattle and sheep. Slow, steady and valuable.',
+    price: 130, requiredLevel: 1,
+    recipes: [{ name: 'livestock', inputs: {}, outputs: { livestock: 1 }, ratePerWorker: 0.045 }],
+    wage: 4, upkeep: 2, maxWorkers: W5, capacity: [40, 80, 130, 190, 260], efficiency: EFF, upgradeCost: [140, 300, 600, 1050],
+  },
+  fishery: {
+    kind: 'fishery', name: 'Fishery', description: 'Boats and nets on the river or the sea. Only where there is water.',
+    price: 110, requiredLevel: 1,
+    recipes: [{ name: 'fish', inputs: {}, outputs: { fish: 1 }, ratePerWorker: 0.15 }],
+    wage: 4, upkeep: 2, maxWorkers: W5, capacity: [70, 140, 230, 340, 460], efficiency: EFF, upgradeCost: [120, 260, 520, 950],
+  },
+  lumbercamp: {
+    kind: 'lumbercamp', name: 'Lumber Camp', description: 'Fells timber in the forests around the city.',
+    price: 90, requiredLevel: 1,
+    recipes: [{ name: 'wood', inputs: {}, outputs: { wood: 1 }, ratePerWorker: 0.22 }],
+    wage: 4, upkeep: 2, maxWorkers: W5, capacity: [80, 160, 260, 380, 520], efficiency: EFF, upgradeCost: [110, 240, 480, 900],
+  },
+  // ---- Resources
+  mine: {
+    kind: 'mine', name: 'Mine', description: 'Digs iron ore or coal. Only in the hills and mountains.',
+    price: 260, requiredLevel: 2,
+    recipes: [
+      { name: 'iron', inputs: {}, outputs: { iron: 1 }, ratePerWorker: 0.1 },
+      { name: 'coal', inputs: {}, outputs: { coal: 1 }, ratePerWorker: 0.17 },
+    ],
+    wage: 5, upkeep: 4, maxWorkers: W5, capacity: [60, 120, 200, 300, 420], efficiency: EFF, upgradeCost: [280, 560, 1000, 1800],
+  },
+  quarry: {
+    kind: 'quarry', name: 'Quarry', description: 'Cuts building stone for a growing realm.',
+    price: 150, requiredLevel: 1,
+    recipes: [{ name: 'stone', inputs: {}, outputs: { stone: 1 }, ratePerWorker: 0.22 }],
+    wage: 4, upkeep: 3, maxWorkers: W5, capacity: [80, 160, 260, 380, 520], efficiency: EFF, upgradeCost: [160, 340, 640, 1150],
+  },
+  // ---- Food & drink
+  mill: {
+    kind: 'mill', name: 'Mill', description: 'Grinds wheat into flour, which bakers turn into half as much bread again.',
+    price: 160, requiredLevel: 2,
+    recipes: [{ name: 'flour', inputs: { wheat: 1 }, outputs: { flour: 1 }, ratePerWorker: 0.3 }],
+    wage: 4, upkeep: 3, maxWorkers: W5, capacity: [80, 160, 260, 380, 520], efficiency: EFF, upgradeCost: [180, 380, 720, 1300],
+  },
+  brewery: {
+    kind: 'brewery', name: 'Brewery', description: 'Brews ale from wheat. Citizens drink more of it every autumn.',
+    price: 210, requiredLevel: 2,
+    recipes: [{ name: 'ale', inputs: { wheat: 2 }, outputs: { ale: 1 }, ratePerWorker: 0.12 }],
+    wage: 5, upkeep: 3, maxWorkers: W5, capacity: [60, 120, 200, 300, 420], efficiency: EFF, upgradeCost: [220, 460, 860, 1500],
+  },
+  // ---- Manufacturing
+  sawmill: {
+    kind: 'sawmill', name: 'Sawmill', description: 'Saws logs into planks for carpenters and builders.',
+    price: 170, requiredLevel: 2,
+    recipes: [{ name: 'planks', inputs: { wood: 1 }, outputs: { planks: 1 }, ratePerWorker: 0.25 }],
+    wage: 5, upkeep: 3, maxWorkers: W5, capacity: [80, 160, 260, 380, 520], efficiency: EFF, upgradeCost: [190, 400, 760, 1350],
+  },
+  foundry: {
+    kind: 'foundry', name: 'Foundry', description: 'Smelts 2 iron and 1 coal into steel. Smiths make twice the tools from steel.',
+    price: 480, requiredLevel: 3,
+    recipes: [{ name: 'steel', inputs: { iron: 2, coal: 1 }, outputs: { steel: 1 }, ratePerWorker: 0.06 }],
+    wage: 6, upkeep: 6, maxWorkers: W5, capacity: [50, 100, 160, 240, 340], efficiency: EFF, upgradeCost: [450, 850, 1500, 2600],
+  },
+  carpenter: {
+    kind: 'carpenter', name: 'Carpenter', description: 'Builds furniture from 2 planks and half a bolt of cloth.',
+    price: 320, requiredLevel: 3,
+    recipes: [{ name: 'furniture', inputs: { planks: 2, cloth: 0.5 }, outputs: { furniture: 1 }, ratePerWorker: 0.045 }],
+    wage: 6, upkeep: 4, maxWorkers: W5, capacity: [40, 80, 130, 190, 260], efficiency: EFF, upgradeCost: [320, 640, 1150, 2000],
+  },
+  // ---- Retail
+  shop: {
+    kind: 'shop', name: 'Shop', description: 'Sells one good straight to households from your stock in the city, at a retail premium over the exchange.',
+    price: 200, requiredLevel: 2,
+    recipes: [],
+    wage: 5, upkeep: 3, maxWorkers: [1, 2, 3, 4, 5], capacity: [40, 80, 130, 190, 260], efficiency: [1, 1.15, 1.3, 1.45, 1.6], upgradeCost: [220, 460, 860, 1500],
+  },
 };
+
+export const INDUSTRY_OF: Record<BusinessKind, Industry> = {
+  farm: 'agriculture', ranch: 'agriculture', fishery: 'agriculture', lumbercamp: 'agriculture',
+  mine: 'resources', quarry: 'resources',
+  bakery: 'food', mill: 'food', brewery: 'food',
+  blacksmith: 'manufacturing', textile: 'manufacturing', sawmill: 'manufacturing', foundry: 'manufacturing', carpenter: 'manufacturing',
+  shop: 'retail',
+  warehouse: 'logistics', trading: 'logistics',
+};
+for (const k of Object.keys(BUSINESS_DEFS) as BusinessKind[]) BUSINESS_DEFS[k].industry = INDUSTRY_OF[k];
+export const INDUSTRIES: Array<{ id: Industry; label: string }> = [
+  { id: 'agriculture', label: 'Agriculture' }, { id: 'resources', label: 'Resources' }, { id: 'food', label: 'Food & drink' },
+  { id: 'manufacturing', label: 'Manufacturing' }, { id: 'retail', label: 'Retail' }, { id: 'logistics', label: 'Logistics' },
+];
 
 export const businessCapacity = (b: Business) => BUSINESS_DEFS[b.kind].capacity[b.level - 1];
 export const businessMaxWorkers = (b: Business) => BUSINESS_DEFS[b.kind].maxWorkers[b.level - 1];
@@ -124,6 +219,7 @@ export function buyBusiness(world: WorldState, playerId: string, kind: BusinessK
   const cityName = CITY_DEFS[city].name;
   if (p.level < def.requiredLevel) return fail(`Requires level ${def.requiredLevel}`);
   if (!hasAccess(p, city)) return fail(`Open a trading office in ${cityName} first`);
+  if (affinity(city, kind) <= 0) return fail(`A ${def.name.toLowerCase()} cannot be set up in ${cityName}`);
   const q = businessQuote(world, playerId, kind, city);
   const landIdx = p.land.findIndex((l) => l.city === city);
   const plot = landIdx >= 0 ? p.land[landIdx].plot : freePlot(world, city);
@@ -264,9 +360,17 @@ export function setBusinessPolicy(world: WorldState, playerId: string, businessI
     b.policy.minSellPrice = money(v);
   }
   if (policy.product !== undefined) {
-    if (b.kind !== 'blacksmith' || !['tools', 'weapons'].includes(policy.product)) return fail('Invalid product');
+    if (b.kind === 'shop') {
+      if (!(RESOURCES as readonly string[]).includes(policy.product)) return fail('Invalid product');
+    } else if (b.kind !== 'blacksmith' || !['tools', 'weapons'].includes(policy.product)) return fail('Invalid product');
     b.policy.product = policy.product;
+    if (b.kind === 'blacksmith') b.policy.recipe = undefined;
   }
+  if (policy.recipe !== undefined) {
+    if (!BUSINESS_DEFS[b.kind].recipes.some((r) => r.name === policy.recipe)) return fail('Unknown recipe');
+    b.policy.recipe = policy.recipe;
+  }
+  if (policy.autoCollect !== undefined) b.policy.autoCollect = !!policy.autoCollect;
   return ok(b);
 }
 
@@ -285,6 +389,7 @@ export function collectFromBusiness(world: WorldState, playerId: string, busines
     if (units < 1) continue;
     addInv(b.inventory, res, -units);
     addInv(store, res, units);
+    bookTransfer(world, b, null, res, units);
     p.costBasis[res] = p.costBasis[res] ?? world.markets[city].price[res] * 0.6;
     free -= units;
     moved[res] = units;
@@ -317,8 +422,9 @@ function bizTrade(world: WorldState, b: Business, side: 'buy' | 'sell', r: Resou
   return q.data.total;
 }
 
-function recipeFor(b: Business): (Recipe & { name: string }) | undefined {
+export function recipeFor(b: Business): (Recipe & { name: string }) | undefined {
   const def = BUSINESS_DEFS[b.kind];
+  if (b.policy.recipe) { const r = def.recipes.find((x) => x.name === b.policy.recipe); if (r) return r; }
   if (b.kind === 'blacksmith') return def.recipes.find((r) => r.name === (b.policy.product ?? 'tools'));
   return def.recipes[0];
 }
@@ -368,6 +474,50 @@ function runCaravan(world: WorldState, b: Business): void {
   }
 }
 
+/**
+ * Transfer pricing: goods passed between the owner's own businesses and stores
+ * are booked at the local market price, so every business's profit (and the
+ * goodwill a buyer pays for) reflects what its inputs and outputs are worth.
+ * Accounting only: no gold moves.
+ */
+function bookTransfer(world: WorldState, from: Business | null, to: Business | null, r: Resource, qty: number) {
+  const city: MarketId = (to ?? from)!.city ?? 'nearhaven';
+  let unit = world.markets[city].price[r];
+  // Stock drawn from a store may have been shipped in: charge it at its landed cost, approximated by
+  // the cheapest market the owner trades in, so the gain from moving goods shows up in this business.
+  if (!from && to) {
+    const p = world.players[to.ownerId];
+    unit = Math.min(unit, ...MARKETS.filter((c) => hasAccess(p, c)).map((c) => world.markets[c].price[r]));
+  }
+  const value = money(qty * unit);
+  if (from) { from.today.revenue += value; from.totals.revenue += value; }
+  if (to) { to.today.expenses += value; to.totals.expenses += value; }
+}
+
+/**
+ * Move up to `want` units of `r` into business `b` from the owner's own supply in
+ * the same city: first finished goods sitting in their other businesses there
+ * (so a mill draws straight from the farm next door), then their warehouse/depot.
+ */
+function pullLocal(world: WorldState, b: Business, r: Resource, want: number): number {
+  if (want < 1) return 0;
+  const p = world.players[b.ownerId];
+  const city: MarketId = b.city ?? 'nearhaven';
+  let moved = 0;
+  for (const o of Object.values(world.businesses)) {
+    if (moved >= want) break;
+    if (o.id === b.id || o.ownerId !== b.ownerId || (o.city ?? 'nearhaven') !== city || o.policy.autoSell) continue;
+    const orc = recipeFor(o);
+    if (!orc || !(r in orc.outputs)) continue;
+    const take = Math.min(want - moved, Math.floor(o.inventory[r] ?? 0));
+    if (take >= 1) { addInv(o.inventory, r, -take); addInv(b.inventory, r, take); moved += take; bookTransfer(world, o, b, r, take); }
+  }
+  const store = storeFor(p, city);
+  const take = Math.min(want - moved, Math.floor(store[r] ?? 0));
+  if (take >= 1) { addInv(store, r, -take); addInv(b.inventory, r, take); moved += take; bookTransfer(world, null, b, r, take); }
+  return moved;
+}
+
 /** What the owner can expect for a unit of output: the local price when it sells here, otherwise the best city they trade in. */
 function bestOutputPrice(world: WorldState, b: Business, r: Resource): number {
   const city = b.city ?? 'nearhaven';
@@ -385,6 +535,7 @@ export function runBusiness(world: WorldState, b: Business): void {
   const def = BUSINESS_DEFS[b.kind];
   if (b.kind === 'trading') return runCaravan(world, b);
   if (b.kind === 'warehouse') return;
+  if (b.kind === 'shop') return runShop(world, b);
   const rc = recipeFor(b);
   if (!rc || b.workers < 1) return;
   const cap = businessCapacity(b);
@@ -395,14 +546,12 @@ export function runBusiness(world: WorldState, b: Business): void {
 
   const inputs = Object.entries(rc.inputs) as Array<[Resource, number]>;
   if (world.tick % 3 === 0 && inputs.length) {
-    // First use the owner's own stock in this city (shipped in from elsewhere, or bought earlier).
+    // First use the owner's own stock in this city: their other businesses here, then the store.
     if (b.policy.supplyFromStore) {
-      const store = storeFor(p, city);
       for (const [r, perBatch] of inputs) {
         const want = Math.ceil(rc.ratePerWorker * b.workers * eff * 12 * perBatch - (b.inventory[r] ?? 0));
         const room = Math.floor(cap - invTotal(b.inventory));
-        const take = Math.min(want, room, Math.floor(store[r] ?? 0));
-        if (take >= 1) { addInv(store, r, -take); addInv(b.inventory, r, take); }
+        pullLocal(world, b, r, Math.min(want, room));
       }
     }
     // Then top up from the exchange, but only while a batch is worth more than its inputs cost.
@@ -427,7 +576,8 @@ export function runBusiness(world: WorldState, b: Business): void {
   }
 
   // Production.
-  if (invTotal(b.inventory) >= cap && !(b.inventory[out] ?? 0)) b.idle = 'full';
+  if (invTotal(b.inventory) >= cap) b.idle = b.policy.autoCollect && !b.policy.autoSell ? 'store-full' : 'full';
+  else if (b.idle === 'full' || b.idle === 'store-full') b.idle = null;
   if (invTotal(b.inventory) < cap) {
     let batches = rc.ratePerWorker * b.workers * eff;
     if (Object.keys(rc.inputs).length === 0) batches *= productionFactor(world, out);
@@ -452,6 +602,50 @@ export function runBusiness(world: WorldState, b: Business): void {
       if (q.ok && q.data.avgPrice >= b.policy.minSellPrice) bizTrade(world, b, 'sell', out, units, city);
     }
   }
+
+  // Or hand finished goods to the owner's store here, ready for a standing shipment or a shop.
+  if (!b.policy.autoSell && b.policy.autoCollect && world.tick % 6 === 0) {
+    const store = storeFor(p, city);
+    const cap = city === 'nearhaven' ? playerCapacity(world, p.id) : depotCapacity(p, city, world);
+    const units = Math.min(Math.floor(b.inventory[out] ?? 0), Math.floor(cap - invTotal(store)));
+    if (units >= 1) { addInv(b.inventory, out, -units); addInv(store, out, units); bookTransfer(world, b, null, out, units); }
+  }
+}
+
+/**
+ * A shop sells one good straight to households, out of the owner's stock in the
+ * city, at a premium over the exchange price. Households pay from the city's
+ * purse (so nothing is minted) and stop buying when prices are extreme.
+ */
+function runShop(world: WorldState, b: Business): void {
+  if (world.tick % 2 !== 0 || b.workers < 1) return;
+  const p = world.players[b.ownerId];
+  const city: MarketId = b.city ?? 'nearhaven';
+  const r = b.policy.product;
+  if (!r) { b.idle = 'no-inputs'; return; }
+  const m = world.markets[city];
+  const def = BUSINESS_DEFS.shop;
+  pullLocal(world, b, r, Math.floor(businessCapacity(b) - invTotal(b.inventory)));
+  const held = Math.floor(b.inventory[r] ?? 0);
+  if (held < 1) { b.idle = 'no-inputs'; return; }
+  // Retail goes through the exchange like any sale, so it moves the price; households then
+  // pay a premium on top (out of the city's purse) for buying over the counter.
+  const markup = 0.12 + 0.02 * (b.level - 1);
+  const perTick = b.workers * 0.35 * def.efficiency[b.level - 1] * affinity(city, 'shop');
+  const qty = Math.min(held, Math.max(1, Math.floor(perTick * 2)));
+  const q = quoteSell(m, r, qty, ECONOMY.playerSellReserve);
+  if (!q.ok || q.data.avgPrice < b.policy.minSellPrice) { b.idle = 'inputs-too-dear'; return; }
+  const sold = bizTrade(world, b, 'sell', r, qty, city);
+  if (sold <= 0) return;
+  const premium = money(Math.min(sold * markup, Math.max(0, m.treasury - 200)));
+  m.treasury = money(m.treasury - premium);
+  p.gold = money(p.gold + premium);
+  b.idle = null;
+  b.today.revenue += premium;
+  b.totals.revenue += premium;
+  b.today.produced += qty;
+  b.totals.produced += qty;
+  world.ledger.push({ tick: world.tick, playerId: p.id, type: 'business.retail', goldDelta: premium, details: { businessId: b.id, market: city, premium } });
 }
 
 /** Daily wages/upkeep and P&L bookkeeping for a business. */

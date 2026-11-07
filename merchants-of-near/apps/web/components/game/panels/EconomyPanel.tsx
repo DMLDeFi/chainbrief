@@ -6,6 +6,7 @@ import { useFetch } from '@/lib/hooks';
 import { gold } from '@/lib/format';
 import { Badge, Delta, Drawer, LineChart, Meter, Stat } from '../../ui';
 import { IconChart, ResourceIcon } from '../../icons';
+import { SupplyChains } from '../SupplyChains';
 
 const PALETTE = ['#d9a84a', '#8fb35f', '#6aa3c8', '#d2643a', '#b98ab0', '#e2c98f'];
 
@@ -32,7 +33,7 @@ export function EconomyPanel({ world, onClose, onMerchant }: { world: PublicSnap
         <table className="w-full text-xs">
           <thead><tr className="text-left text-muted">
             <th className="px-3 py-2 font-semibold">City</th><th className="px-2 py-2 text-right font-semibold">People</th><th className="px-2 py-2 text-right font-semibold">Exchange purse</th>
-            {(['wheat', 'bread', 'iron', 'coal', 'tools', 'cloth'] as Resource[]).map((r) => <th key={r} className="px-2 py-2 text-right font-semibold"><ResourceIcon r={r} size={14} className="ml-auto" /></th>)}
+            {(['wheat', 'bread', 'iron', 'flour', 'steel', 'tools', 'ale', 'furniture'] as Resource[]).map((r) => <th key={r} className="px-2 py-2 text-right font-semibold"><ResourceIcon r={r} size={14} className="ml-auto" /></th>)}
           </tr></thead>
           <tbody>
             {MARKETS.map((id) => (
@@ -40,7 +41,7 @@ export function EconomyPanel({ world, onClose, onMerchant }: { world: PublicSnap
                 <td className="px-3 py-1.5"><span className="display font-bold text-parchment">{CITY_DEFS[id].name}</span> <span className="text-muted">· {CITY_DEFS[id].title}</span></td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{(id === 'nearhaven' ? world.population : world.cities?.[id]?.population ?? CITY_DEFS[id].population).toLocaleString()}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{gold(world.markets[id].treasury)}g</td>
-                {(['wheat', 'bread', 'iron', 'coal', 'tools', 'cloth'] as Resource[]).map((r) => {
+                {(['wheat', 'bread', 'iron', 'flour', 'steel', 'tools', 'ale', 'furniture'] as Resource[]).map((r) => {
                   const rel = world.markets[id].resources[r].price / RESOURCE_DEFS[r].basePrice;
                   return <td key={r} className={`px-2 py-1.5 text-right tabular-nums ${rel < 0.85 ? 'text-moss' : rel > 1.25 ? 'text-ember' : 'text-parchment-dim'}`}>{gold(world.markets[id].resources[r].price)}</td>;
                 })}
@@ -50,6 +51,8 @@ export function EconomyPanel({ world, onClose, onMerchant }: { world: PublicSnap
         </table>
         <p className="px-3 pb-2 pt-1 text-[11px] text-muted">Regional prices in gold. Green is cheap for that good, red is dear: each city&apos;s industry and needs show up as price gaps between them.</p>
       </div>
+
+      <div className="mt-4"><SupplyChains world={world} /></div>
 
       {world.events.length > 0 && (
         <div className="mt-4 grid gap-2 sm:grid-cols-2">

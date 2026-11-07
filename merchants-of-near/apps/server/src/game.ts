@@ -1,4 +1,10 @@
 import {
+  addRoute,
+  RESOURCES,
+  BUSINESS_DEFS,
+  removeRoute,
+  toggleRoute,
+  type BusinessKind,
   buyLand,
   sellBusiness,
   sellLand,
@@ -35,7 +41,7 @@ import {
 import { z } from 'zod';
 import type { Store } from './store/types';
 
-const resource = z.enum(['wheat', 'bread', 'wood', 'iron', 'coal', 'stone', 'tools', 'livestock', 'fish', 'cloth', 'weapons']);
+const resource = z.enum(RESOURCES);
 const id = z.string().min(1).max(64);
 const qty = z.number().int().min(1).max(500);
 const gold = z.number().positive().max(100000);
@@ -44,7 +50,10 @@ const city = z.enum(MARKETS);
 /** Every player action is validated against this schema before it reaches the engine. */
 export const ActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('trade'), side: z.enum(['buy', 'sell']), resource, qty, market: city.optional(), limitPrice: z.number().positive().optional() }),
-  z.object({ type: z.literal('business.buy'), kind: z.enum(['farm', 'bakery', 'blacksmith', 'textile', 'warehouse', 'trading']), city: city.optional() }),
+  z.object({ type: z.literal('business.buy'), kind: z.enum(Object.keys(BUSINESS_DEFS) as [BusinessKind, ...BusinessKind[]]), city: city.optional() }),
+  z.object({ type: z.literal('route.add'), from: city, to: city, resource, batch: z.number().int().min(5).max(500), keep: z.number().int().min(0).max(5000).optional() }),
+  z.object({ type: z.literal('route.remove'), routeId: id }),
+  z.object({ type: z.literal('route.toggle'), routeId: id, active: z.boolean() }),
   z.object({ type: z.literal('business.sell'), businessId: id }),
   z.object({ type: z.literal('land.buy'), city }),
   z.object({ type: z.literal('land.sell'), city }),
@@ -55,7 +64,7 @@ export const ActionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('business.policy'),
     businessId: id,
-    policy: z.object({ autoBuyInputs: z.boolean().optional(), autoSell: z.boolean().optional(), supplyFromStore: z.boolean().optional(), minSellPrice: z.number().min(0).max(10000).optional(), product: resource.optional() }),
+    policy: z.object({ autoBuyInputs: z.boolean().optional(), autoSell: z.boolean().optional(), supplyFromStore: z.boolean().optional(), autoCollect: z.boolean().optional(), recipe: z.string().min(1).max(40).optional(), minSellPrice: z.number().min(0).max(10000).optional(), product: resource.optional() }),
   }),
   z.object({ type: z.literal('warehouse.expand') }),
   z.object({ type: z.literal('invest'), merchantId: id, amount: gold }),
@@ -182,6 +191,15 @@ export class GameService {
         break;
       case 'business.buy':
         r = buyBusiness(w, userId, action.kind, action.city ?? 'nearhaven');
+        break;
+      case 'route.add':
+        r = addRoute(w, userId, action);
+        break;
+      case 'route.remove':
+        r = removeRoute(w, userId, action.routeId);
+        break;
+      case 'route.toggle':
+        r = toggleRoute(w, userId, action.routeId, action.active);
         break;
       case 'business.sell':
         r = sellBusiness(w, userId, action.businessId);

@@ -64,6 +64,17 @@ export const SPECS: Record<string, BuildingSpec> = {
   'p-blacksmith': { w: 2, d: 2, h: 28, wall: 'stone', wallColor: 0x958d83, roof: 'gable', roofMat: 'slate', roofColor: 0x454a56, roofH: 22, chimney: 'right', door: 'double', windows: 1, emblem: 'anvil', forge: true, seed: 23 },
   'p-textile': { w: 2, d: 2, h: 30, wall: 'timber', wallColor: 0xeadde0, plinth: 5, roof: 'gable', roofMat: 'clay', roofColor: 0x8b5786, roofH: 24, door: 'arched', windows: 2, emblem: 'cloth', seed: 24 },
   'p-warehouse': { w: 2, d: 2, h: 34, wall: 'planks', wallColor: 0x96714a, plinth: 6, roof: 'gable', roofMat: 'shingle', roofColor: 0x5d4a35, roofH: 22, door: 'barn', windows: 1, emblem: 'crate', seed: 25 },
+  'p-ranch': { w: 2, d: 2, h: 24, wall: 'planks', wallColor: 0x8f5a36, plinth: 3, roof: 'gable', roofMat: 'thatch', roofColor: 0xc9a25e, roofH: 22, door: 'barn', windows: 1, emblem: 'wheat', seed: 31 },
+  'p-fishery': { w: 2, d: 2, h: 24, wall: 'planks', wallColor: 0x6f8794, plinth: 4, roof: 'gable', roofMat: 'shingle', roofColor: 0x3f5b68, roofH: 20, door: 'double', windows: 1, emblem: 'fish', seed: 32 },
+  'p-lumbercamp': { w: 2, d: 2, h: 24, wall: 'planks', wallColor: 0x7a5232, plinth: 3, roof: 'gable', roofMat: 'shingle', roofColor: 0x4d6b3a, roofH: 20, door: 'barn', windows: 1, emblem: 'axe', seed: 33 },
+  'p-mine': { w: 2, d: 2, h: 24, wall: 'stone', wallColor: 0x7d776f, plinth: 5, roof: 'gable', roofMat: 'slate', roofColor: 0x3b3f47, roofH: 18, chimney: 'left', door: 'double', windows: 1, emblem: 'pick', seed: 34 },
+  'p-quarry': { w: 2, d: 2, h: 22, wall: 'ashlar', wallColor: 0xb3aa98, plinth: 5, roof: 'gable', roofMat: 'slate', roofColor: 0x5a5e66, roofH: 18, door: 'double', windows: 1, emblem: 'pick', seed: 35 },
+  'p-mill': { w: 2, d: 2, h: 34, wall: 'plaster', wallColor: 0xe6dcc4, plinth: 5, roof: 'gable', roofMat: 'thatch', roofColor: 0xcfa35a, roofH: 26, door: 'arched', windows: 2, emblem: 'wheat', dovecote: true, seed: 36 },
+  'p-brewery': { w: 2, d: 2, h: 30, wall: 'brick', wallColor: 0x9c4f32, plinth: 5, roof: 'gable', roofMat: 'clay', roofColor: 0x7a3a24, roofH: 24, chimney: 'both', door: 'double', windows: 2, emblem: 'tankard', seed: 37 },
+  'p-sawmill': { w: 2, d: 2, h: 28, wall: 'planks', wallColor: 0xa77546, plinth: 4, roof: 'gable', roofMat: 'shingle', roofColor: 0x6a4a2e, roofH: 20, door: 'barn', windows: 1, emblem: 'axe', seed: 38 },
+  'p-foundry': { w: 2, d: 2, h: 32, wall: 'stone', wallColor: 0x6e6862, plinth: 6, roof: 'gable', roofMat: 'slate', roofColor: 0x2f333a, roofH: 20, chimney: 'both', door: 'double', windows: 1, emblem: 'anvil', forge: true, seed: 39 },
+  'p-carpenter': { w: 2, d: 2, h: 30, wall: 'timber', wallColor: 0xe9dcc2, plinth: 5, roof: 'gable', roofMat: 'clay', roofColor: 0x9a5a34, roofH: 24, door: 'arched', windows: 2, emblem: 'axe', awning: 0x6e8f5a, seed: 40 },
+  'p-shop': { w: 2, d: 2, h: 32, wall: 'plaster', wallColor: 0xf0e2c6, plinth: 5, roof: 'hip', roofMat: 'clay', roofColor: 0xb65a38, roofH: 22, door: 'arched', windows: 2, emblem: 'coin', awning: 0xc23b3b, porch: true, seed: 41 },
   'p-trading': { w: 2, d: 2, h: 34, wall: 'brick', wallColor: 0xa85a3c, plinth: 6, roof: 'hip', roofMat: 'slate', roofColor: 0x2d6170, roofH: 22, door: 'double', windows: 2, emblem: 'ship', porch: true, seed: 26 },
 };
 

@@ -29,6 +29,16 @@ export function ResourceIcon({ r, size = 20, ...rest }: P & { r: string }) {
       return (<svg {...s}><path d="M4 6h12a3 3 0 0 1 3 3v9H7a3 3 0 0 1-3-3V6Z" fill="#9b6fb5" /><path d="M16 6a3 3 0 0 1 3 3H16V6Z" fill="#7d4f9a" /><path d="M6 9h9M6 12h9M6 15h9" stroke="#c6a6dc" strokeWidth=".9" /></svg>);
     case 'weapons':
       return (<svg {...s}><path d="M16.5 3.5L20 4l.5 3.5L9 19l-3-3L16.5 3.5Z" fill="#c9d1da" /><path d="M5 14.5l4.5 4.5M4 20l3-3" stroke="#8a5a33" strokeWidth="2.2" strokeLinecap="round" /><path d="M12.5 8l3.5 3.5" stroke="#8c95a0" strokeWidth="1" /></svg>);
+    case 'flour':
+      return (<svg {...s}><path d="M7 7.5c0-1.5 2.2-2.5 5-2.5s5 1 5 2.5L18.5 19c0 1-2.9 2-6.5 2s-6.5-1-6.5-2L7 7.5Z" fill="#efe6d2" /><path d="M7.2 7.6c1.2 1 3 1.4 4.8 1.4s3.6-.4 4.8-1.4" stroke="#b9a988" strokeWidth="1.2" /><path d="M9.5 13.5h5M10 16h4" stroke="#c9b48a" strokeWidth="1.1" strokeLinecap="round" /><ellipse cx="12" cy="5.6" rx="2.2" ry=".9" fill="#fff" /></svg>);
+    case 'planks':
+      return (<svg {...s}><path d="M3 15.5l9-5 9 5-9 5-9-5Z" fill="#c9965c" /><path d="M3 12.5l9-5 9 5-9 5-9-5Z" fill="#deae72" /><path d="M7.5 10l9 5M5.2 11.3l9 5" stroke="#a87642" strokeWidth=".9" /><path d="M3 12.5v3l9 5v-3M21 12.5v3l-9 5" stroke="#8a5e33" strokeWidth=".9" fill="none" /></svg>);
+    case 'steel':
+      return (<svg {...s}><path d="M4 15l4-6h12l-4 6H4Z" fill="#d4dde6" /><path d="M4 15v3h12v-3M16 18l4-6v-3" fill="#9aa7b4" stroke="#7d8996" strokeWidth=".8" /><path d="M8.5 11h8" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round" opacity=".8" /></svg>);
+    case 'ale':
+      return (<svg {...s}><path d="M6 7h10v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V7Z" fill="#d99a35" /><path d="M16 9.5h2a2 2 0 0 1 2 2v2.5a2 2 0 0 1-2 2h-2" stroke="#8a5a2a" strokeWidth="1.8" fill="none" /><path d="M5.5 7.5c0-2 1.5-3 3-2.6.6-1.3 2.4-1.6 3.4-.6 1-.8 3.1-.2 3.4 1.3 1 .3 1.2 1.2.7 1.9H5.5Z" fill="#fff6e2" /><path d="M9 11v7M13 11v7" stroke="#b97a22" strokeWidth="1" /></svg>);
+    case 'furniture':
+      return (<svg {...s}><path d="M5 10h14v3H5z" fill="#a76b3c" /><path d="M6 13h2v7H6zM16 13h2v7h-2z" fill="#7d4c28" /><path d="M7 4h10v6H7z" fill="#c08550" /><path d="M9 6h6M9 8h6" stroke="#8a5530" strokeWidth=".9" /></svg>);
     default:
       return (<svg {...s}><circle cx="12" cy="12" r="7" fill="#d9a84a" /></svg>);
   }

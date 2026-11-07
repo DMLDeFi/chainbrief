@@ -75,6 +75,39 @@ export const CITY_DEFS: Record<MarketId, CityDef> = {
   },
 };
 
+/**
+ * Processed goods in each city's hinterland (units/hour). Each city's industry
+ * shows here: Goldenvale mills and brews, Emberforge saws and smelts, the capital
+ * buys furniture and ale. Nearhaven has no hinterland: only its citizens consume,
+ * so these goods must be made or imported by players and traders.
+ */
+const INDUSTRY: Partial<Record<MarketId, { flows: CityDef['flows']; stock: CityDef['stock'] }>> = {
+  aurora: {
+    flows: { flour: { produce: 0.3, consume: 0.5 }, planks: { produce: 0.6, consume: 0.5 }, steel: { produce: 0.1, consume: 0.18 }, ale: { produce: 0.5, consume: 0.6 }, furniture: { produce: 0.08, consume: 0.12 } },
+    stock: {},
+  },
+  kingsreach: {
+    flows: { flour: { produce: 0.3, consume: 0.55 }, planks: { produce: 0.3, consume: 0.55 }, steel: { produce: 0.15, consume: 0.28 }, ale: { produce: 0.5, consume: 0.85 }, furniture: { produce: 0.12, consume: 0.24 } },
+    stock: { flour: 0.5, planks: 0.5, steel: 0.5, ale: 0.6, furniture: 0.5 },
+  },
+  emberforge: {
+    flows: { flour: { produce: 0.15, consume: 0.25 }, planks: { produce: 0.7, consume: 0.45 }, steel: { produce: 0.55, consume: 0.3 }, ale: { produce: 0.3, consume: 0.42 }, furniture: { produce: 0.18, consume: 0.1 } },
+    stock: { flour: 0.5, planks: 1.4, steel: 1.6, ale: 0.6, furniture: 1.4 },
+  },
+  goldenvale: {
+    flows: { flour: { produce: 0.9, consume: 0.45 }, planks: { produce: 0.2, consume: 0.3 }, steel: { produce: 0.02, consume: 0.04 }, ale: { produce: 0.7, consume: 0.4 }, furniture: { produce: 0.03, consume: 0.05 } },
+    stock: { flour: 1.7, planks: 0.6, steel: 0.4, ale: 1.6, furniture: 0.5 },
+  },
+  deepcrag: {
+    flows: { flour: { produce: 0.1, consume: 0.2 }, planks: { produce: 0.25, consume: 0.35 }, steel: { produce: 0.3, consume: 0.2 }, ale: { produce: 0.25, consume: 0.45 }, furniture: { produce: 0.02, consume: 0.04 } },
+    stock: { flour: 0.4, planks: 0.7, steel: 1.3, ale: 0.5, furniture: 0.4 },
+  },
+};
+for (const [id, add] of Object.entries(INDUSTRY) as Array<[MarketId, { flows: CityDef['flows']; stock: CityDef['stock'] }]>) {
+  Object.assign(CITY_DEFS[id].flows, add.flows);
+  Object.assign(CITY_DEFS[id].stock, add.stock);
+}
+
 export type RouteKind = 'road' | 'river' | 'sea' | 'pass';
 export interface Route { a: MarketId; b: MarketId; kind: RouteKind; hours: number; name: string }
 export const ROUTES: Route[] = [

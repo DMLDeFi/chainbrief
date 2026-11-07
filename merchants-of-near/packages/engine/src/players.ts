@@ -44,6 +44,7 @@ export function registerPlayer(world: WorldState, id: string, name: string): Res
     charters: [],
     depots: {},
     land: [],
+    routes: [],
     taxArrears: 0,
   };
   world.players[id] = p;
