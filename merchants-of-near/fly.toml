@@ -1,0 +1,46 @@
+# Fly.io config for Merchants of NEAR. Change `app` to a unique name before `fly launch`.
+# The world simulation lives in one process, so run exactly ONE machine.
+app = "merchants-of-near"
+primary_region = "iad"
+kill_signal = "SIGTERM"
+kill_timeout = 30
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8080"
+  DATA_DIR = "/data"
+  COOKIE_SECURE = "true"
+  TICK_MS = "2000"
+  # Fast-forward advances the shared world for every player, so it is off on the public server.
+  ALLOW_FAST_FORWARD = "false"
+  NEAR_NETWORK_ID = "testnet"
+  NEAR_RPC_URL = "https://rpc.testnet.near.org"
+
+# Persistent volume for the JSON store (world snapshot, accounts, ledger).
+# Not needed if you set a DATABASE_URL secret for PostgreSQL instead.
+[[mounts]]
+  source = "mon_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # The economy runs continuously; never stop the machine.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "40s"
+    interval = "15s"
+    timeout = "5s"
+    method = "GET"
+    path = "/api/health"
+
+[[vm]]
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1
