@@ -84,9 +84,9 @@ export const TownCanvas = forwardRef<TownHandle, Props>(function TownCanvas({ wo
 /**
  * WebGL on a software rasteriser (no GPU: some VMs, remote desktops, headless
  * browsers) blocks the page for a minute or more while the town's textures are
- * uploaded. Such browsers flag the context with a "major performance caveat",
- * or name a software renderer
- * (SwiftShader, llvmpipe), so we fall back to the canvas renderer there. `?renderer=webgl|canvas` forces one.
+ * uploaded. Such browsers name a software renderer (SwiftShader, llvmpipe), so
+ * we fall back to the canvas renderer there. A real graphics card always gets
+ * WebGL, which is much faster for a large town. `?renderer=webgl|canvas` forces one.
  */
 function pickRenderer(Phaser: typeof import('phaser')): number {
   const forced = new URLSearchParams(location.search).get('renderer');
@@ -94,12 +94,12 @@ function pickRenderer(Phaser: typeof import('phaser')): number {
   if (forced === 'canvas') return Phaser.CANVAS;
   try {
     const c = document.createElement('canvas');
-    const gl = c.getContext('webgl', { failIfMajorPerformanceCaveat: true });
+    const gl = c.getContext('webgl');
     if (!gl) return Phaser.CANVAS;
     const info = gl.getExtension('WEBGL_debug_renderer_info');
     const name = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
-    if (/swiftshader|llvmpipe|softpipe|software/i.test(name)) return Phaser.CANVAS;
     gl.getExtension('WEBGL_lose_context')?.loseContext();
+    if (/swiftshader|llvmpipe|softpipe|software/i.test(name)) return Phaser.CANVAS;
   } catch {
     return Phaser.CANVAS;
   }

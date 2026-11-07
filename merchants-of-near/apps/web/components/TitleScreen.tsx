@@ -1,5 +1,6 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { gameAudio } from '@/lib/audio';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useGame, refreshMe } from '@/lib/store';
@@ -12,6 +13,8 @@ const EMBERS = Array.from({ length: 14 }, (_, i) => ({ left: (i * 53) % 100, del
 
 /** Cinematic main menu: the living town drifts behind an illuminated title. */
 export function TitleScreen() {
+  // Music starts with the first click on the menu and carries on into the game.
+  useEffect(() => gameAudio.init(), []);
   const { world, me, meLoaded } = useGame();
   const router = useRouter();
   const [busy, setBusy] = useState(false);

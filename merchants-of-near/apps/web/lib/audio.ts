@@ -96,6 +96,10 @@ class GameAudio {
       });
     };
     events.forEach((e) => window.addEventListener(e, kick, true));
+    // Arriving from the title screen or intro page (same document), the player has
+    // already clicked, so the browser allows sound now: start without waiting for another click.
+    const nav = navigator as Navigator & { userActivation?: { hasBeenActive: boolean } };
+    if (nav.userActivation?.hasBeenActive) kick();
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) this.pauseAll();
       else this.refresh();

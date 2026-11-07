@@ -1,5 +1,7 @@
 'use client';
+import { useEffect } from 'react';
 import Link from 'next/link';
+import { gameAudio } from '@/lib/audio';
 import { useSearchParams } from 'next/navigation';
 import { useGame } from '@/lib/store';
 import { Coin, IconHouse, IconPeople, IconScale, IconWallet } from '@/components/icons';
@@ -12,6 +14,7 @@ const CARDS = [
 ];
 
 export function Intro() {
+  useEffect(() => gameAudio.init(), []);
   const next = useSearchParams().get('next') ?? '/play';
   const { me } = useGame();
   return (

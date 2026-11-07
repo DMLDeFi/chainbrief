@@ -73,6 +73,7 @@ export class TownScene extends Phaser.Scene {
   private growthObjs: Phaser.GameObjects.GameObject[] = [];
   /** Small town-house art reused for district homes, so growth draws no new textures. */
   private houseArts: BuildingArt[] = [];
+  private cullAt = 0;
   private glows: Array<{ img: Phaser.GameObjects.Image; seed: number; base: number }> = [];
   private smoke: Phaser.GameObjects.Particles.ParticleEmitter[] = [];
   private buildings = new Map<string, PlacedBuilding>();
@@ -219,11 +220,13 @@ export class TownScene extends Phaser.Scene {
   private paintGround(season: string) {
     const ex = growthExtent(this.openDistricts);
     this.ground.clear();
+    // One batched pass: a separate draw per tile cost thousands of GPU flushes on a big town.
+    this.ground.beginDraw();
+    const brush = this.make.image({ x: 0, y: 0, key: 'softblob', add: false });
     const stamp = (key: string, gx: number, gy: number, tint = 0xffffff, alpha = 1) => {
       const { x, y } = iso(gx, gy);
-      const img = this.make.image({ x: 0, y: 0, key, add: false }).setOrigin(0.5, 0).setTint(tint).setAlpha(alpha);
-      this.ground.draw(img, x - this.groundOrigin.x, y - this.groundOrigin.y);
-      img.destroy();
+      brush.setTexture(key).setOrigin(0.5, 0).setScale(1).setTint(tint).setAlpha(alpha);
+      this.ground.batchDraw(brush, x - this.groundOrigin.x, y - this.groundOrigin.y);
     };
     for (let gx = ex.x0; gx <= ex.x1; gx++) {
       for (let gy = ex.y0; gy <= ex.y1; gy++) {
@@ -248,13 +251,14 @@ export class TownScene extends Phaser.Scene {
     // Soft ambient occlusion under buildings so they sit in the ground.
     const ao = (gx: number, gy: number, w: number, d: number) => {
       const c = iso(gx + w / 2, gy + d / 2);
-      const img = this.make.image({ x: 0, y: 0, key: 'softblob', add: false }).setTint(0x000000).setAlpha(0.55).setScale((w + d) * 0.62, (w + d) * 0.62);
-      this.ground.draw(img, c.x - this.groundOrigin.x, c.y - this.groundOrigin.y + 6);
-      img.destroy();
+      brush.setTexture('softblob').setOrigin(0.5, 0.5).setTint(0x000000).setAlpha(0.55).setScale((w + d) * 0.62, (w + d) * 0.62);
+      this.ground.batchDraw(brush, c.x - this.groundOrigin.x, c.y - this.groundOrigin.y + 6);
     };
     for (const b of BUILDINGS) ao(b.gx, b.gy, b.w, b.d);
     for (const d of DECOR) ao(d.gx, d.gy, d.w, d.d);
     for (const d of this.openDistricts) for (const h of d.houses) ao(h.gx, h.gy, 1, 1);
+    this.ground.endDraw();
+    brush.destroy();
   }
 
   private occupied(gx: number, gy: number) {
@@ -285,6 +289,24 @@ export class TownScene extends Phaser.Scene {
     ctx.drawImage(src, 0, 0);
     ct.refresh();
     return key;
+  }
+
+  /** Show only the scenery near the camera's view (with a margin, so nothing pops in while panning). */
+  private cullStatic(v: Phaser.Geom.Rectangle) {
+    const pad = 240;
+    const x0 = v.x - pad, x1 = v.right + pad, y0 = v.y - pad, y1 = v.bottom + pad + 120;
+    for (const o of this.decoObjs) {
+      const im = o as Phaser.GameObjects.Image;
+      im.setVisible(im.x > x0 && im.x < x1 && im.y > y0 && im.y < y1);
+    }
+    for (const w of this.water) w.setVisible(w.x > x0 && w.x < x1 && w.y > y0 && w.y < y1);
+    // Chimney smoke out of view stops emitting.
+    for (const e of this.smoke) {
+      const vis = e.x > x0 && e.x < x1 && e.y > y0 && e.y < y1;
+      if (vis === e.visible) continue;
+      e.setVisible(vis);
+      if (vis) e.resume(); else e.pause();
+    }
   }
 
   /** Is a district tile taken by a street, a plot, a home or a lamp? */
@@ -347,13 +369,13 @@ export class TownScene extends Phaser.Scene {
     return img;
   }
 
-  private addLights(art: BuildingArt, img: Phaser.GameObjects.Image, extras: Phaser.GameObjects.GameObject[] = []) {
+  private addLights(art: BuildingArt, img: Phaser.GameObjects.Image, extras: Phaser.GameObjects.GameObject[] = [], smoke = true) {
     for (const w of art.windows) {
       const g = this.add.image(img.x + w.x, img.y + w.y, 'glow').setBlendMode(Phaser.BlendModes.ADD).setDepth(90002).setAlpha(0).setScale(0.5).setTint(0xffc070);
       this.glows.push({ img: g, seed: Math.random() * 10, base: 0.85 });
       extras.push(g);
     }
-    for (const c of art.chimneys) {
+    for (const c of smoke ? art.chimneys : []) {
       const em = this.add.particles(img.x + c.x, img.y + c.y, 'puff2', {
         speedY: { min: -24, max: -14 },
         speedX: { min: 3, max: 11 },
@@ -934,6 +956,7 @@ export class TownScene extends Phaser.Scene {
     dead.forEach((o) => o.destroy());
     this.decoObjs = [];
     this.growthObjs = [];
+    this.cullAt = 0;
     this.buildGround();
     this.buildDecorations();
     this.buildDistricts();
@@ -954,7 +977,8 @@ export class TownScene extends Phaser.Scene {
         img.on('pointerover', () => this.hoverLabel.setText(`Town house · ${d.name}`).setVisible(true));
         img.on('pointerout', () => this.hoverLabel.setVisible(false));
         const extras: Phaser.GameObjects.GameObject[] = [];
-        this.addLights(art, img, extras);
+        // Smoke from one chimney in three: a whole district of plumes costs more than it adds.
+        this.addLights(art, img, extras, n % 3 === 0);
         this.growthObjs.push(img, ...extras);
       }
       for (const l of d.lamps) {
@@ -1355,11 +1379,16 @@ export class TownScene extends Phaser.Scene {
         b.img.y = v.y + Math.random() * v.height * 0.5;
       }
     }
-    // Wind sways the trees (gentle, stronger in storms).
+    // Trees, rocks and water out of view are hidden, so they cost nothing to draw or animate.
+    if (time >= this.cullAt) {
+      this.cullAt = time + 200;
+      this.cullStatic(v);
+    }
+    // Wind sways the trees in view (gentle, stronger in storms).
     if (motion && !this.lowQuality) {
       const gw = this.director.weather ?? this.snap?.weather;
       const gust = gw === 'storm' ? 4 : gw === 'rain' ? 2.2 : 1.1;
-      for (const t of this.trees) t.img.setAngle(Math.sin(time / 900 + t.seed) * gust);
+      for (const t of this.trees) if (t.img.visible) t.img.setAngle(Math.sin(time / 900 + t.seed) * gust);
     }
 
     // Merchants: sleep at night, work at their station by day, carry goods to market after trades,
