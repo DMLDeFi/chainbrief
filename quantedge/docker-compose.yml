@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: quantedge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: quantedge
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quantedge"]
+      interval: 10s
+    restart: unless-stopped
+
+  app:
+    build: .
+    env_file: .env
+    depends_on:
+      db: {condition: service_healthy}
+    ports: ["127.0.0.1:8000:8000"]   # put a TLS reverse proxy in front; do not expose directly
+    restart: unless-stopped
+
+  # Nightly logical backup. Retention (pruning old dumps) is left to the host's backup policy.
+  backup:
+    image: postgres:16
+    depends_on: [db]
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes: [./backups:/backups]
+    entrypoint: ["/bin/sh", "-c", "while true; do pg_dump -h db -U quantedge quantedge | gzip > /backups/qe_$$(date +%Y%m%d_%H%M).sql.gz; sleep 86400; done"]
+    restart: unless-stopped
+
+volumes:
+  pgdata:

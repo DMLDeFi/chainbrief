@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QuantEdge AI Elite</title>
+<style>
+  :root{--bg:#0b0e14;--panel:#121722;--panel2:#171d2a;--line:#242c3c;--text:#e6e8ee;--dim:#8b93a5;
+        --pos:#3ccf91;--neg:#ff5c6c;--accent:#5b8cff;--warn:#f5b041;font-synthesis:none}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+  header{display:flex;align-items:center;gap:16px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+  header h1{font-size:15px;letter-spacing:.08em;margin:0}
+  nav{display:flex;gap:4px;flex-wrap:wrap}
+  nav button{background:none;border:1px solid transparent;color:var(--dim);padding:6px 10px;border-radius:6px;cursor:pointer;font:inherit}
+  nav button.on{color:var(--text);border-color:var(--line);background:var(--panel2)}
+  main{padding:16px;max-width:1400px;margin:0 auto}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .card h3{margin:0 0 6px;font-size:12px;color:var(--dim);font-weight:500;text-transform:uppercase;letter-spacing:.06em}
+  .big{font-size:22px;font-weight:600}
+  .pos{color:var(--pos)} .neg{color:var(--neg)} .warn{color:var(--warn)} .dim{color:var(--dim)}
+  .tablewrap{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+  table{border-collapse:collapse;width:100%;min-width:720px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{color:var(--dim);font-weight:500;font-size:12px;position:sticky;top:0;background:var(--panel)}
+  tr.click{cursor:pointer} tr.click:hover{background:var(--panel2)}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;border:1px solid var(--line)}
+  button.act{background:var(--accent);color:#fff;border:0;border-radius:6px;padding:8px 14px;font:inherit;cursor:pointer}
+  button.danger{background:var(--neg)}
+  input,select{background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:8px;border-radius:6px;font:inherit}
+  .login{max-width:340px;margin:12vh auto;display:flex;flex-direction:column;gap:10px}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  pre{white-space:pre-wrap;background:var(--panel2);padding:12px;border-radius:8px;border:1px solid var(--line)}
+  .err{color:var(--neg)}
+  @media (max-width:600px){main{padding:12px 16px}.big{font-size:18px}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="vendor/react.production.min.js"></script>
+<script src="vendor/react-dom.production.min.js"></script>
+<script src="vendor/htm.umd.js"></script>
+<script>
+const {useState, useEffect, useCallback} = React;
+const html = htm.bind(React.createElement);
+const store = {get(k){try{return sessionStorage.getItem(k)}catch(e){return null}}, set(k,v){try{v==null?sessionStorage.removeItem(k):sessionStorage.setItem(k,v)}catch(e){}}};
+
+async function api(path, opts={}){
+  const r = await fetch(path, {...opts, headers:{"Content-Type":"application/json", Authorization:"Bearer "+(store.get("qe_token")||""), ...(opts.headers||{})}});
+  if(r.status===401){store.set("qe_token",null); location.reload(); return}
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.detail||("HTTP "+r.status));
+  return j;
+}
+const pct = (x,d=2)=> x==null||isNaN(x)? "—" : (x*100).toFixed(d)+"%";
+const num = (x,d=2)=> x==null||isNaN(x)? "—" : Number(x).toLocaleString(undefined,{maximumFractionDigits:d});
+const cls = x=> x>0?"pos":x<0?"neg":"";
+const when = ms=> ms? new Date(ms).toISOString().replace("T"," ").slice(0,16)+"Z":"—";
+
+function usePoll(path, every=10000){
+  const [data,setData]=useState(null),[err,setErr]=useState(null);
+  const load=useCallback(()=>api(path).then(d=>{setData(d);setErr(null)}).catch(e=>setErr(e.message)),[path]);
+  useEffect(()=>{load(); const t=setInterval(load,every); return ()=>clearInterval(t)},[load,every]);
+  return [data,err,load];
+}
+
+function Stat({label,value,c}){return html`<div class="card"><h3>${label}</h3><div class=${"big mono "+(c||"")}>${value}</div></div>`}
+
+function Overview(){
+  const [d,err]=usePoll("/api/overview");
+  if(err) return html`<p class="err">${err}</p>`; if(!d) return html`<p class="dim">Loading…</p>`;
+  const s=d.status||{};
+  return html`<div>
+    <div class="grid">
+      <${Stat} label="Market status" value=${s.halted?"HALTED":(s.exchange_healthy===false?"DEGRADED":(d.status?"LIVE":"ENGINE OFF"))} c=${s.halted?"neg":""}/>
+      <${Stat} label="Mode" value=${d.paper?"PAPER":"LIVE"} c=${d.paper?"warn":""}/>
+      <${Stat} label="Active signals" value=${d.active_signals}/>
+      <${Stat} label="Total signals" value=${d.total_signals}/>
+      <${Stat} label="Winning" value=${d.wins} c="pos"/>
+      <${Stat} label="Losing" value=${d.losses} c="neg"/>
+      <${Stat} label="Net P&L (USDT)" value=${num(d.net_pnl)} c=${cls(d.net_pnl)}/>
+      <${Stat} label="Current drawdown" value=${pct(d.current_drawdown)} c=${d.current_drawdown>0?"neg":""}/>
+    </div>
+    ${d.status && html`<div class="card"><h3>Engine</h3><pre class="mono">${Object.entries(d.status).map(([k,v])=>k+": "+v).join("\n")}</pre></div>`}
+  </div>`;
+}
+
+function Scanner(){
+  const [rows,err]=usePoll("/api/scanner",15000);
+  if(err) return html`<p class="err">${err}</p>`; if(!rows) return html`<p class="dim">Loading…</p>`;
+  if(!rows.length) return html`<p class="dim">Scanner has no data yet (engine off or warming up).</p>`;
+  return html`<div class="tablewrap"><table><thead><tr><th>Symbol</th><th>Eligible</th><th>24h turnover</th><th>Spread</th><th>Funding</th><th>24h</th><th>Vol spike</th><th>OI Δ</th><th>Trend 4h</th><th>Regime</th><th>Best score</th><th>Reasons</th></tr></thead><tbody>
+  ${rows.map(r=>html`<tr key=${r.symbol}><td class="mono">${r.symbol}</td><td>${r.eligible?"✓":"✗"}</td><td class="mono">$${num(r.turnover_24h/1e6,1)}M</td><td class="mono">${num(r.spread_bps,1)}bp</td><td class="mono">${pct(r.funding_rate,4)}</td><td class=${"mono "+cls(r.change_24h)}>${pct(r.change_24h)}</td><td class="mono">${num(r.volume_spike)}x</td><td class="mono">${pct(r.oi_change)}</td><td>${r.trend}</td><td>${r.regime}</td><td class="mono">${r.candidate_score==null?"—":num(r.candidate_score,1)}</td><td class="dim">${(r.reasons||[]).join("; ")}</td></tr>`)}
+  </tbody></table></div>`;
+}
+
+function Signals(){
+  const [tab,setTab]=useState("active"); const [sel,setSel]=useState(null);
+  const q={active:"/api/signals?status=PUBLISHED,ENTRY_ZONE_REACHED,FILLED,PARTIALLY_FILLED",completed:"/api/signals?status=TAKE_PROFIT,STOP_LOSS,TIME_EXIT",expired:"/api/signals?status=EXPIRED,INVALIDATED,CANCELLED",rejected:"/api/rejections?limit=300"}[tab];
+  const [rows,err]=usePoll(q,15000);
+  return html`<div>
+    <div class="row" style=${{marginBottom:12}}>${["active","completed","expired","rejected"].map(t=>html`<button class=${"pill"+(t===tab?" on":"")} style=${{cursor:"pointer",background:t===tab?"var(--panel2)":"none",color:"var(--text)"}} onClick=${()=>{setTab(t);setSel(null)}}>${t}</button>`)}</div>
+    ${err && html`<p class="err">${err}</p>`}
+    ${rows && tab==="rejected" && html`<div class="tablewrap"><table><thead><tr><th>Time</th><th>Symbol</th><th>Strategy</th><th>Dir</th><th>Stage</th><th>Score</th><th>Reasons</th></tr></thead><tbody>${rows.map((r,i)=>html`<tr key=${i}><td class="mono">${when(r.ts)}</td><td class="mono">${r.symbol}</td><td>${r.strategy}</td><td>${r.direction}</td><td>${r.stage}</td><td class="mono">${r.score?num(r.score,1):"—"}</td><td class="dim">${r.reasons.join("; ")}</td></tr>`)}</tbody></table></div>`}
+    ${rows && tab!=="rejected" && html`<div class="tablewrap"><table><thead><tr><th>ID</th><th>Time</th><th>Pair</th><th>Dir</th><th>Strategy</th><th>Status</th><th>Entry</th><th>TP</th><th>SL</th><th>Score</th></tr></thead><tbody>${rows.map(r=>html`<tr class="click" key=${r.signal_id} onClick=${()=>setSel(r.signal_id)}><td class="mono">${r.signal_id}</td><td class="mono">${when(r.created_ms)}</td><td class="mono">${r.symbol}</td><td>${r.direction}</td><td>${r.strategy}</td><td><span class="pill">${r.status}</span></td><td class="mono">${num(r.plan.entry,6)}</td><td class="mono">${num(r.plan.take_profit,6)}</td><td class="mono">${num(r.plan.stop,6)}</td><td class="mono">${num(r.score,1)}</td></tr>`)}</tbody></table></div>`}
+    ${rows && !rows.length && html`<p class="dim">Nothing here. The engine is designed to reject far more than it publishes.</p>`}
+    ${sel && html`<${SignalDetail} id=${sel}/>`}
+  </div>`;
+}
+
+function SignalDetail({id}){
+  const [d,err]=usePoll("/api/signals/"+id,30000);
+  if(err) return html`<p class="err">${err}</p>`; if(!d) return null;
+  const p=d.plan;
+  return html`<div class="card" style=${{marginTop:12}}><h3>${d.signal_id} · ${d.symbol} ${d.direction}</h3>
+    <div class="grid">
+      <${Stat} label="Entry" value=${num(p.entry,6)}/><${Stat} label="Take profit" value=${num(p.take_profit,6)}/><${Stat} label="Stop" value=${num(p.stop,6)}/>
+      <${Stat} label="Net ROI target" value=${pct(p.net_roi)}/><${Stat} label="Account risk" value=${pct(p.account_risk_pct,3)}/><${Stat} label="Net R:R" value=${num(p.reward_risk)}/>
+      <${Stat} label="Notional" value=${num(p.notional)}/><${Stat} label="Margin" value=${num(p.margin)}/><${Stat} label="Fees (in/out)" value=${num(p.entry_fee,3)+" / "+num(p.exit_fee,3)}/>
+      <${Stat} label="Funding est." value=${num(p.funding_cost,3)}/><${Stat} label="Liq. price" value=${num(p.liquidation_price,6)}/><${Stat} label="Exp. hold" value=${num(p.expected_hold_hours,1)+"h"}/>
+    </div>
+    <p><b>Why:</b> ${d.explanation||d.rationale}</p><p><b>Invalidation:</b> ${d.invalidation}</p>
+    <p class="dim">Score components: ${Object.entries(d.components).map(([k,v])=>k+" "+num(v,0)).join(" · ")}${d.calibrated?"":" (uncalibrated)"}</p>
+    <h3>Lifecycle</h3><pre class="mono">${d.events.map(e=>when(e.ts)+"  "+e.kind+"  "+JSON.stringify(e.data)).join("\n")}</pre></div>`;
+}
+
+function Curve({points,dd}){
+  if(!points||points.length<2) return html`<p class="dim">No completed trades yet.</p>`;
+  const W=800,H=180,min=Math.min(...points),max=Math.max(...points),r=(max-min)||1;
+  const peak=[];points.reduce((m,v,i)=>(peak[i]=Math.max(m,v)),-Infinity);
+  const xy=(v,i)=>[(i/(points.length-1))*W, H-((v-min)/r)*(H-10)-5];
+  const line=points.map((v,i)=>xy(v,i).join(",")).join(" ");
+  const ddp=points.map((v,i)=>[(i/(points.length-1))*W, ((peak[i]-v)/peak[i])*400].join(",")).join(" ");
+  return html`<svg viewBox=${`0 0 ${W} ${H+70}`} style=${{width:"100%",height:"auto"}} role="img" aria-label="Equity curve and drawdown">
+    <polyline points=${line} fill="none" stroke="var(--accent)" stroke-width="2"/>
+    <g transform=${`translate(0,${H+10})`}><polyline points=${ddp} fill="none" stroke="var(--neg)" stroke-width="1.5"/></g>
+    <text x="4" y="14" fill="var(--dim)" font-size="12">Equity ${num(points[points.length-1])}</text>
+    <text x="4" y=${H+24} fill="var(--dim)" font-size="12">Drawdown (max ${pct(dd)})</text></svg>`;
+}
+
+function Analytics(){
+  const [d,err]=usePoll("/api/analytics",30000); const [v]=usePoll("/api/validation",60000);
+  if(err) return html`<p class="err">${err}</p>`; if(!d) return html`<p class="dim">Loading…</p>`;
+  const s=d.summary;
+  return html`<div>
+    <div class="grid">
+      <${Stat} label="Trades" value=${s.trades||0}/><${Stat} label="Win rate" value=${pct(s.win_rate,1)}/>
+      <${Stat} label="Profit factor" value=${num(s.profit_factor)}/><${Stat} label="Expectancy" value=${s.trades?num(s.expectancy_r)+"R":"—"} c=${cls(s.expectancy_r)}/>
+      <${Stat} label="Lower-95% exp." value=${s.trades?num(s.expectancy_r_lower95)+"R":"—"} c=${cls(s.expectancy_r_lower95)}/>
+      <${Stat} label="Max drawdown" value=${pct(s.max_drawdown)}/><${Stat} label="Max consec. losses" value=${s.max_consecutive_losses??"—"}/>
+    </div>
+    <div class="card"><h3>Equity curve</h3><${Curve} points=${s.equity_curve} dd=${s.max_drawdown}/></div>
+    <div class="grid" style=${{marginTop:12}}>${["daily","weekly","monthly"].map(k=>html`<div class="card" key=${k}><h3>${k}</h3><pre class="mono">${Object.entries(d.periods[k]).slice(-10).map(([p,x])=>p+"  "+num(x)).join("\n")||"—"}</pre></div>`)}</div>
+    ${s.by_strategy && html`<div class="card"><h3>Strategy comparison</h3><pre class="mono">${Object.entries(s.by_strategy).map(([k,x])=>k.padEnd(18)+" n="+x.trades+"  win "+pct(x.win_rate,0)+"  "+num(x.expectancy_r)+"R").join("\n")}</pre></div>`}
+    ${s.by_regime && html`<div class="card"><h3>By regime</h3><pre class="mono">${Object.entries(s.by_regime).map(([k,x])=>k.padEnd(26)+" n="+x.trades+"  "+num(x.expectancy_r)+"R").join("\n")}</pre></div>`}
+    <div class="card"><h3>Score calibration</h3><pre class="mono">${(d.calibration||[]).map(b=>b.bucket.padEnd(8)+" n="+b.n+"  win "+(b.win_rate==null?"—":pct(b.win_rate,0))+"  mean "+(b.mean_r==null?"—":num(b.mean_r)+"R")).join("\n")||"No calibration data."}</pre></div>
+    ${v && html`<div class="card"><h3>Live-deployment gate: ${v.approved?"PASSED":"NOT PASSED — continue paper trading"}</h3><pre class="mono">${Object.entries(v.checks).map(([k,c])=>(c.pass?"✓ ":"✗ ")+k+": "+c.detail).join("\n")}</pre></div>`}
+  </div>`;
+}
+
+function Risk({role}){
+  const [d,err,reload]=usePoll("/api/risk",10000); const [msg,setMsg]=useState("");
+  const act=(path,body)=>api(path,{method:"POST",body:JSON.stringify(body||{})}).then(()=>{setMsg("Done");reload()}).catch(e=>setMsg(e.message));
+  if(err) return html`<p class="err">${err}</p>`; if(!d) return html`<p class="dim">Loading…</p>`;
+  const s=d.status||{}, st=d.state||{};
+  return html`<div>
+    <div class="grid">
+      <${Stat} label="Equity" value=${num(s.equity)}/><${Stat} label="Daily loss used" value=${pct(s.daily_loss_pct)+" / "+pct(d.limits.max_daily_loss)} c=${s.daily_loss_pct>0?"warn":""}/>
+      <${Stat} label="Risk per trade" value=${pct(d.limits.risk_per_trade)}/><${Stat} label="Leverage" value=${d.leverage+"x isolated"}/>
+      <${Stat} label="Open positions" value=${(s.open??0)+" / "+d.limits.max_open_positions}/><${Stat} label="Consecutive losses" value=${s.consecutive_losses??0}/>
+      <${Stat} label="State" value=${!d.status?"ENGINE OFF":s.halted?"HALTED":"ACTIVE"} c=${!d.status?"warn":s.halted?"neg":"pos"}/>
+    </div>
+    ${s.halt_reason && html`<p class="warn">Halt reason: ${s.halt_reason}</p>`}
+    <div class="card"><h3>Open exposure</h3><pre class="mono">${Object.values(st.open||{}).map(e=>e.signal_id+"  "+e.symbol+"  "+e.direction+"  notional "+num(e.notional)+"  risk "+num(e.risk_amount)).join("\n")||"None"}</pre></div>
+    <div class="row" style=${{marginTop:12}}>
+      ${role!=="viewer" && html`<button class="act danger" onClick=${()=>{const r=prompt("Reason for emergency shutdown?");if(r!==null)act("/api/risk/halt",{reason:r||"manual"})}}>EMERGENCY SHUTDOWN</button>`}
+      ${role==="admin" && html`<button class="act" onClick=${()=>act("/api/risk/resume")}>Resume</button>`}
+      <span class="dim">${msg}</span>
+    </div></div>`;
+}
+
+function Settings({role}){
+  const [d,err,reload]=usePoll("/api/settings",60000); const [vals,setVals]=useState({}); const [msg,setMsg]=useState("");
+  if(err) return html`<p class="err">${err}</p>`; if(!d) return html`<p class="dim">Loading…</p>`;
+  const cur=k=>{const [a,b]=k.split(".");return d[a][b]};
+  const save=()=>api("/api/settings",{method:"PUT",body:JSON.stringify({values:Object.fromEntries(Object.entries(vals).map(([k,v])=>[k,Number(v)]))})}).then(r=>{setMsg("Saved: "+JSON.stringify(r.applied));setVals({});reload()}).catch(e=>setMsg(e.message));
+  return html`<div>
+    <div class="tablewrap"><table><thead><tr><th>Setting</th><th>Current</th><th>Allowed range</th><th>New value</th></tr></thead><tbody>
+    ${Object.entries(d.bounds).map(([k,[lo,hi]])=>html`<tr key=${k}><td class="mono">${k}</td><td class="mono">${cur(k)}</td><td class="mono dim">${lo} – ${hi}</td><td>${role==="admin"?html`<input type="number" step="any" value=${vals[k]??""} onInput=${e=>setVals({...vals,[k]:e.target.value})}/>`:"—"}</td></tr>`)}
+    </tbody></table></div>
+    ${role==="admin" && html`<div class="row" style=${{marginTop:12}}><button class="act" onClick=${save}>Save</button><span class="dim">${msg}</span></div>`}
+    <div class="grid" style=${{marginTop:16}}>
+      <${Stat} label="Telegram" value=${d.telegram.enabled?d.telegram.recipients+" recipients":"disabled"}/>
+      <${Stat} label="WhatsApp" value=${d.whatsapp.enabled?d.whatsapp.recipients+" recipients":"disabled"}/>
+      <${Stat} label="Auto-execution" value=${d.execution.enabled?"ENABLED":"disabled"} c=${d.execution.enabled?"warn":""}/>
+    </div>
+    <p class="dim">Channel credentials are set through environment variables, never through this page. Fee model: taker ${pct(d.costs.taker_fee,3)}, maker ${pct(d.costs.maker_fee,3)}.</p>
+  </div>`;
+}
+
+function App(){
+  const [token,setToken]=useState(store.get("qe_token")); const [role,setRole]=useState(store.get("qe_role")||"viewer");
+  const [page,setPage]=useState("Overview"); const [u,setU]=useState(""),[p,setP]=useState(""),[e,setE]=useState("");
+  if(!token) return html`<form class="login card" onSubmit=${ev=>{ev.preventDefault();fetch("/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u,password:p})}).then(r=>r.json().then(j=>{if(!r.ok)throw new Error(j.detail);store.set("qe_token",j.token);store.set("qe_role",j.role);setRole(j.role);setToken(j.token)})).catch(x=>setE(x.message))}}>
+      <h1 style=${{margin:0,fontSize:16,letterSpacing:".08em"}}>QUANTEDGE AI ELITE</h1>
+      <input placeholder="Username" value=${u} onInput=${x=>setU(x.target.value)} autocomplete="username"/>
+      <input placeholder="Password" type="password" value=${p} onInput=${x=>setP(x.target.value)} autocomplete="current-password"/>
+      <button class="act" type="submit">Sign in</button><span class="err">${e}</span></form>`;
+  const pages={Overview, "Live Scanner":Scanner, Signals, Analytics, "Risk Centre":Risk, Settings};
+  const P=pages[page];
+  return html`<div><header><h1>QUANTEDGE AI ELITE</h1>
+    <nav>${Object.keys(pages).map(k=>html`<button key=${k} class=${k===page?"on":""} onClick=${()=>setPage(k)}>${k}</button>`)}</nav>
+    <span class="dim" style=${{marginLeft:"auto"}}>${role} · <a href="#" style=${{color:"var(--dim)"}} onClick=${()=>{store.set("qe_token",null);location.reload()}}>sign out</a></span></header>
+    <main><${P} role=${role}/></main></div>`;
+}
+ReactDOM.createRoot(document.getElementById("root")).render(html`<${App}/>`);
+</script>
+</body>
+</html>
