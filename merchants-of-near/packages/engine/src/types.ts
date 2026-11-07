@@ -134,6 +134,13 @@ export interface MerchantState {
   investors: Record<string, number>;
 }
 
+export interface LandHolding {
+  city: MarketId;
+  plot: number;
+  paid: number;
+  tick: number;
+}
+
 export type BusinessKind = 'farm' | 'bakery' | 'blacksmith' | 'textile' | 'warehouse' | 'trading';
 
 export interface BusinessDaily {
@@ -156,6 +163,8 @@ export interface Business {
   /** Player-configurable automation. */
   policy: {
     autoBuyInputs: boolean;
+    /** Draw inputs from the owner's warehouse/depot in the business's city before buying. */
+    supplyFromStore?: boolean;
     autoSell: boolean;
     minSellPrice: number;
     /** For blacksmith: which product to craft. */
@@ -171,7 +180,15 @@ export interface Business {
   deedTokenId?: string;
   /** NEAR account that holds the deed on-chain (authoritative for deeded businesses). */
   chainOwner?: string;
+  /** City the business stands in; its plot index is within that city's land. */
+  city: MarketId;
   plot: number;
+  /** What was paid for the land under it. */
+  landCost?: number;
+  /** Built on the guild's free starter plot (no land tax, no land to sell). */
+  starterGrant?: boolean;
+  /** Why production is paused, for the owner's dashboard. */
+  idle?: 'inputs-too-dear' | 'no-inputs' | 'full' | null;
   /** Trading company caravan state. */
   caravan?: { to: MarketId; arriveTick: number; cargo: Inventory; costBasis: number };
 }
@@ -265,6 +282,10 @@ export interface PlayerState {
   charters: MarketId[];
   /** Goods held in other cities' depots. The home warehouse is `inventory` (Nearhaven). */
   depots: Partial<Record<MarketId, Inventory>>;
+  /** Vacant land the player owns (built-on plots belong to their business). */
+  land: LandHolding[];
+  /** Land tax the player could not pay; vacant land is repossessed if it grows too large. */
+  taxArrears: number;
 }
 
 /** Goods moving between two cities along the route network. */
@@ -352,8 +373,10 @@ export interface WorldState {
   feed: FeedEntry[];
   nextId: number;
   nextFeedId: number;
-  /** Plots in town available for player businesses. */
+  /** Legacy Nearhaven plot list (pre multi-city saves). Superseded by `landUse`. */
   plotsUsed: number[];
+  /** Plot indices taken in each city, by a business or by vacant land someone owns. */
+  landUse: Record<MarketId, number[]>;
   /** Pending ledger entries for the persistence layer to flush. */
   ledger: LedgerEntry[];
   /** Guild treasury pays mission rewards; it is funded by market fees, so rewards are not minted from nothing. */

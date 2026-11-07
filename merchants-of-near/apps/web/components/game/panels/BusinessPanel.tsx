@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import type { BusinessKind, PublicSnapshot } from '@mon/engine';
+import { CITY_DEFS, landDef, MARKETS, type BusinessKind, type MarketId, type PublicSnapshot } from '@mon/engine';
 import { api, type Me } from '@/lib/api';
 import { BUSINESS_DEFS, LEVELS, RESOURCE_DEFS } from '@/lib/catalog';
 import { useAction } from '@/lib/hooks';
@@ -18,69 +18,180 @@ export function BusinessPanel({ world, me, selection, onClose }: { world: Public
   const sel = selection?.type === 'plot' ? selection : null;
   const [focus, setFocus] = useState<string | null>(sel?.businessId ?? p.businesses[0]?.id ?? null);
   const other = sel?.businessId && sel.ownerId !== me.user.id ? world.businesses.find((b) => b.id === sel.businessId) : null;
-  const current = p.businesses.find((b) => b.id === focus);
+  const current = focus && focus !== 'property' ? p.businesses.find((b) => b.id === focus) : undefined;
+  const byCity = MARKETS.map((c) => [c, p.businesses.filter((b) => b.city === c)] as const).filter(([, list]) => list.length > 0);
+  const companyProfit = p.businesses.reduce((s, b) => s + (b.history.at(-1)?.profit ?? 0), 0);
 
   return (
-    <Drawer wide title="Businesses" subtitle="Produce goods, employ workers and grow an empire" icon={<IconHouse />} onClose={onClose}>
+    <Drawer wide title="Businesses & Property" subtitle="Build across the realm, invest in land and grow an empire" icon={<IconHouse />} onClose={onClose}>
       {other && (
         <div className="mb-4 rounded-xl border border-line/60 bg-black/20 p-3 text-sm">
           This {other.kind} belongs to <b>{other.owner}</b> (level {other.level}). Deeded businesses can be bought from their owner on NEAR — see the Wallet panel.
         </div>
       )}
-      <div className="grid gap-4 lg:grid-cols-[230px_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
         <div className="space-y-2">
-          <div className="label">Your holdings</div>
+          <div className="flex items-baseline justify-between">
+            <span className="label">Your company</span>
+            {p.businesses.length > 0 && <span className={`num text-[11px] ${companyProfit >= 0 ? 'text-moss' : 'text-ember'}`}>{companyProfit >= 0 ? '+' : ''}{gold(companyProfit)}g yesterday</span>}
+          </div>
           {p.businesses.length === 0 && <p className="text-xs text-muted">You own no businesses yet.</p>}
-          {p.businesses.map((b) => {
-            const last = b.history.at(-1);
-            return (
-              <button key={b.id} onClick={() => setFocus(b.id)} className={`w-full rounded-xl border px-3 py-2 text-left ${focus === b.id ? 'border-brass bg-brass/10' : 'border-line/60 bg-black/20 hover:border-brass-deep'}`}>
-                <div className="flex items-center justify-between text-sm font-semibold"><span>{b.def.name}</span><span className="text-[10px] text-muted">Lv {b.level}</span></div>
-                <div className="num text-[11px] text-muted">{b.workers} workers · {last ? <span className={last.profit >= 0 ? 'text-moss' : 'text-ember'}>{last.profit >= 0 ? '+' : ''}{gold(last.profit)}g yesterday</span> : 'new'}</div>
-                {b.deedTokenId && <Badge tone="near">deed on NEAR</Badge>}
-              </button>
-            );
-          })}
+          {byCity.map(([c, list]) => (
+            <div key={c} className="space-y-1.5">
+              <div className="pt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-brass">{CITY_DEFS[c].name}</div>
+              {list.map((b) => {
+                const last = b.history.at(-1);
+                return (
+                  <button key={b.id} onClick={() => setFocus(b.id)} className={`w-full rounded-xl border px-3 py-2 text-left ${focus === b.id ? 'border-brass bg-brass/10' : 'border-line/60 bg-black/20 hover:border-brass-deep'}`}>
+                    <div className="flex items-center justify-between text-sm font-semibold"><span>{b.def.name}</span><LevelPips level={b.level} max={b.maxLevel} /></div>
+                    <div className="num text-[11px] text-muted">{b.workers} workers · {last ? <span className={last.profit >= 0 ? 'text-moss' : 'text-ember'}>{last.profit >= 0 ? '+' : ''}{gold(last.profit)}g yesterday</span> : 'new'}</div>
+                    {b.deedTokenId && <Badge tone="near">deed on NEAR</Badge>}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+          {p.overhead > 1 && <p className="text-[11px] text-muted">Company overhead: upkeep ×{p.overhead.toFixed(2)} for running {p.businesses.length} businesses.</p>}
+          <button onClick={() => setFocus('property')} className={`w-full rounded-xl border px-3 py-2.5 text-left text-sm ${focus === 'property' ? 'border-brass bg-brass/10 text-brass' : 'border-line/60 bg-black/20 text-parchment-dim hover:border-brass-deep'}`}>
+            Land & property{p.land.length > 0 && <span className="text-muted"> · {p.land.length} plot{p.land.length === 1 ? '' : 's'}</span>}
+          </button>
           <button onClick={() => setFocus(null)} className={`w-full rounded-xl border border-dashed px-3 py-2.5 text-left text-sm ${focus === null ? 'border-brass text-brass' : 'border-line text-parchment-dim hover:border-brass-deep'}`}>+ Open a new business</button>
         </div>
-        <div>{current ? <Detail b={current} me={me} world={world} /> : <Catalog me={me} freePlots={12 - world.businesses.length} onBought={(id) => setFocus(id)} />}</div>
+        <div>
+          {current ? <Detail b={current} me={me} world={world} /> : focus === 'property' ? <Property me={me} world={world} /> : <Catalog me={me} world={world} onBought={(id) => setFocus(id)} />}
+        </div>
       </div>
     </Drawer>
   );
 }
 
-function Catalog({ me, freePlots, onBought }: { me: Me; freePlots: number; onBought: (id: string) => void }) {
+export function LevelPips({ level, max }: { level: number; max: number }) {
+  return (
+    <span className="flex gap-0.5" aria-label={`Level ${level} of ${max}`}>
+      {Array.from({ length: max }, (_, i) => <span key={i} className={`h-1.5 w-2.5 rounded-sm ${i < level ? 'bg-brass-bright' : 'bg-line/60'}`} />)}
+    </span>
+  );
+}
+
+function fitLabel(a: number) {
+  if (a === 1) return null;
+  const pct = Math.round(Math.abs(a - 1) * 100);
+  return <Badge tone={a > 1 ? 'moss' : 'ember'}>{a > 1 ? `+${pct}% here` : `−${pct}% here`}</Badge>;
+}
+
+function Catalog({ me, world, onBought }: { me: Me; world: PublicSnapshot; onBought: (id: string) => void }) {
   const { run, busy } = useAction();
   const p = me.player;
+  const [city, setCity] = useState<MarketId>('nearhaven');
+  const quotes = p.quotes[city];
+  const land = world.cityLand[city];
+  const free = land.plots - land.taken;
+  const ld = landDef(city);
   return (
     <div>
-      <p className="mb-3 text-xs text-muted">{freePlots} building plot{freePlots === 1 ? '' : 's'} left in town. Businesses run automatically every hour: they buy inputs, produce, sell output above your floor price and pay wages each dawn.</p>
-      <div className="grid gap-2.5 sm:grid-cols-2">
-        {(Object.keys(BUSINESS_DEFS) as BusinessKind[]).map((k) => {
-          const d = BUSINESS_DEFS[k];
-          const locked = p.level < d.requiredLevel;
-          const recipe = d.recipes[0];
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {MARKETS.map((c) => {
+          const open = !!p.quotes[c];
           return (
-            <div key={k} className={`rounded-xl border p-3.5 ${locked ? 'border-line/40 bg-black/10 opacity-70' : 'border-line/70 bg-black/20'}`}>
-              <div className="flex items-center justify-between">
-                <h4 className="display font-bold">{d.name}</h4>
-                <span className="num flex items-center gap-1 text-sm font-bold text-brass-bright"><Coin size={14} />{d.price}</span>
-              </div>
-              <p className="mt-1 text-xs leading-snug text-muted">{d.description}</p>
-              {recipe && (
-                <div className="mt-2 flex items-center gap-1.5 text-[11px] text-parchment-dim">
-                  {Object.entries(recipe.inputs).map(([r, q]) => <span key={r} className="flex items-center gap-0.5">{q}<ResourceIcon r={r} size={14} /></span>)}
-                  {Object.keys(recipe.inputs).length > 0 && <span>→</span>}
-                  {Object.entries(recipe.outputs).map(([r, q]) => <span key={r} className="flex items-center gap-0.5">{q}<ResourceIcon r={r} size={14} /></span>)}
-                </div>
-              )}
-              <div className="mt-2 text-[11px] text-muted">Wage {d.wage}g/worker/day · upkeep {d.upkeep}g</div>
-              <button disabled={busy || locked || p.gold < d.price || freePlots <= 0} onClick={async () => { const b = await run<{ id: string }>({ type: 'business.buy', kind: k }, `${d.name} opened!`); if (b) onBought(b.id); }} className="btn btn-gold mt-3 w-full py-1.5 text-sm">
-                {locked ? `Requires Lv ${d.requiredLevel} · ${LEVELS[d.requiredLevel - 1].title}` : p.gold < d.price ? `Need ${d.price}g` : 'Purchase'}
-              </button>
-            </div>
+            <button key={c} onClick={() => setCity(c)} className={`rounded-lg border px-2.5 py-1 text-xs ${city === c ? 'border-brass bg-brass/15 text-brass-bright' : 'border-line/60 text-parchment-dim hover:border-brass-deep'}`}>
+              {CITY_DEFS[c].name}{!open && ' 🔒'}
+            </button>
           );
         })}
+      </div>
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Stat label="Plots free" value={`${free} / ${land.plots}`} />
+        <Stat label="Land price" value={`${gold(land.price)}g`} sub={`prosperity ×${land.prosperity}`} />
+        <Stat label="Building costs" value={`×${ld.build}`} sub="vs Nearhaven" />
+        <Stat label="Local wages" value={`×${ld.wages}`} sub="vs Nearhaven" />
+      </div>
+      {!quotes ? (
+        <Empty>Open a trading office in {CITY_DEFS[city].name} (World Map or Marketplace) before building there.</Empty>
+      ) : (
+        <>
+          <p className="mb-3 text-xs text-muted">
+            Businesses run automatically every hour on the {world.markets[city].name}: they buy inputs, produce, sell above your floor price and pay local wages each dawn.
+            {quotes.farm.grant && ' The guild grants your first Nearhaven plot for free.'}
+            {quotes.farm.ownLand && ' You own a vacant plot here, so you only pay for the building.'}
+          </p>
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            {(Object.keys(BUSINESS_DEFS) as BusinessKind[]).map((k) => {
+              const d = BUSINESS_DEFS[k];
+              const q = quotes[k];
+              const locked = p.level < d.requiredLevel;
+              const recipe = d.recipes[0];
+              return (
+                <div key={k} className={`rounded-xl border p-3.5 ${locked ? 'border-line/40 bg-black/10 opacity-70' : 'border-line/70 bg-black/20'}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="display font-bold">{d.name}</h4>
+                    <span className="num flex items-center gap-1 text-sm font-bold text-brass-bright"><Coin size={14} />{gold(q.total)}</span>
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
+                    <span>{gold(q.build)}g building{q.land > 0 ? ` + ${gold(q.land)}g land` : q.grant ? ' · free starter plot' : q.ownLand ? ' · on your plot' : ''}</span>
+                    {fitLabel(q.affinity)}
+                  </div>
+                  <p className="mt-1 text-xs leading-snug text-muted">{d.description}</p>
+                  {recipe && (
+                    <div className="mt-2 flex items-center gap-1.5 text-[11px] text-parchment-dim">
+                      {Object.entries(recipe.inputs).map(([r, n]) => <span key={r} className="flex items-center gap-0.5">{n}<ResourceIcon r={r} size={14} /></span>)}
+                      {Object.keys(recipe.inputs).length > 0 && <span>→</span>}
+                      {Object.entries(recipe.outputs).map(([r, n]) => <span key={r} className="flex items-center gap-0.5">{n}<ResourceIcon r={r} size={14} /></span>)}
+                    </div>
+                  )}
+                  <div className="mt-2 text-[11px] text-muted">Wage {gold(d.wage * ld.wages)}g/worker/day · upkeep {d.upkeep}g × level</div>
+                  <button disabled={busy || locked || p.gold < q.total || q.plotsFree <= 0} onClick={async () => { const b = await run<{ id: string }>({ type: 'business.buy', kind: k, city }, `${d.name} opened in ${CITY_DEFS[city].name}!`); if (b) onBought(b.id); }} className="btn btn-gold mt-3 w-full py-1.5 text-sm">
+                    {locked ? `Requires Lv ${d.requiredLevel} · ${LEVELS[d.requiredLevel - 1].title}` : q.plotsFree <= 0 ? 'No plots left here' : p.gold < q.total ? `Need ${gold(q.total)}g` : `Build in ${CITY_DEFS[city].name}`}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Property({ me, world }: { me: Me; world: PublicSnapshot }) {
+  const { run, busy } = useAction();
+  const p = me.player;
+  const held = (c: MarketId) => p.land.filter((l) => l.city === c);
+  const built = (c: MarketId) => p.businesses.filter((b) => b.city === c).length;
+  const totalValue = p.land.reduce((s, l) => s + l.value, 0);
+  const dailyTax = p.land.reduce((s, l) => s + l.tax, 0);
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Stat label="Vacant land" value={`${p.land.length} plot${p.land.length === 1 ? '' : 's'}`} sub={`worth ${gold(totalValue)}g`} />
+        <Stat label="Land tax" value={`${gold(dailyTax)}g/day`} sub="1% of value, plus built plots" />
+        <Stat label="Arrears" value={<span className={p.taxArrears > 0 ? 'text-ember' : ''}>{gold(p.taxArrears)}g</span>} sub={p.taxArrears > 0 ? 'unpaid tax: vacant land can be repossessed' : 'all paid'} />
+      </div>
+      <p className="text-xs text-muted">Land is bought from the city, so the money goes into its purse. Prices rise as a city fills up and as it prospers, and fall back when owners sell. Holding land costs tax. You can build on a plot you own, or sell it back at today&apos;s value less 5%.</p>
+      <div className="overflow-x-auto rounded-xl border border-line/60">
+        <table className="w-full text-xs">
+          <thead><tr className="text-left text-muted"><th className="px-3 py-2">City</th><th className="px-2 py-2 text-right">Plots taken</th><th className="px-2 py-2 text-right">Next plot</th><th className="px-2 py-2 text-right">Yours</th><th className="px-3 py-2" /></tr></thead>
+          <tbody>
+            {MARKETS.map((c) => {
+              const l = world.cityLand[c];
+              const mine = held(c);
+              const open = !!p.quotes[c];
+              return (
+                <tr key={c} className="border-t border-line/40">
+                  <td className="px-3 py-2"><span className="display font-bold text-parchment">{CITY_DEFS[c].name}</span><div className="text-[10px] text-muted">{CITY_DEFS[c].title}</div></td>
+                  <td className="px-2 py-2 text-right tabular-nums">{l.taken} / {l.plots}</td>
+                  <td className="px-2 py-2 text-right tabular-nums">{gold(l.price)}g</td>
+                  <td className="px-2 py-2 text-right tabular-nums">{mine.length} vacant · {built(c)} built</td>
+                  <td className="px-3 py-2">
+                    <div className="flex justify-end gap-1.5">
+                      <button disabled={busy || !open || l.taken >= l.plots || p.gold < l.price} onClick={() => run({ type: 'land.buy', city: c }, `Bought a plot in ${CITY_DEFS[c].name}`)} className="btn btn-gold px-2.5 py-1 text-[11px]">{open ? 'Buy plot' : '🔒 office'}</button>
+                      <button disabled={busy || mine.length === 0} onClick={() => run({ type: 'land.sell', city: c }, `Sold a plot in ${CITY_DEFS[c].name}`)} className="btn btn-ghost px-2.5 py-1 text-[11px]">Sell{mine.length ? ` · ${gold(mine[0].value * 0.95)}g` : ''}</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -121,11 +232,16 @@ function Detail({ b, me, world }: { b: OwnedBiz; me: Me; world: PublicSnapshot }
           <h3 className="display text-xl font-bold">{b.name}</h3>
           <p className="text-xs text-muted">{b.def.description}</p>
         </div>
-        <Badge tone={suspended ? 'ember' : 'moss'}>{suspended ? 'suspended' : 'operating'}</Badge>
+        <div className="flex flex-col items-end gap-1">
+          <Badge tone={suspended ? 'ember' : 'moss'}>{suspended ? 'suspended' : 'operating'}</Badge>
+          <span className="text-[11px] text-muted">{CITY_DEFS[b.city].name}{b.affinity !== 1 && <> · <span className={b.affinity > 1 ? 'text-moss' : 'text-ember'}>{b.affinity > 1 ? '+' : '−'}{Math.round(Math.abs(b.affinity - 1) * 100)}% {b.affinity > 1 ? 'local advantage' : 'poor fit'}</span></>}</span>
+        </div>
       </div>
+      {b.idle === 'inputs-too-dear' && <p className="rounded-lg border border-ember/40 bg-ember/10 px-3 py-2 text-xs text-[#f0b8a0]">Paused buying: inputs on the {world.markets[b.city].name} cost more than the output is worth. Ship cheaper inputs into your {CITY_DEFS[b.city].name} {b.city === 'nearhaven' ? 'warehouse' : 'depot'}, turn off auto-sell to sell elsewhere, or dismiss workers to save wages.</p>}
+      {b.idle === 'full' && <p className="rounded-lg border border-line/60 bg-black/20 px-3 py-2 text-xs text-muted">Stock is full: collect goods or enable auto-sell.</p>}
       {suspended && <p className="rounded-lg border border-ember/40 bg-ember/10 px-3 py-2 text-xs text-[#f0b8a0]">The deed is held on-chain by {b.chainOwner}. Production pauses until the deed holder plays.</p>}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Stat label="Lifetime P/L" value={<span className={profit >= 0 ? 'text-moss' : 'text-ember'}>{gold(profit)}</span>} sub={`incl. ${gold(b.purchasePrice)}g purchase`} />
+        <Stat label="Lifetime P/L" value={<span className={profit >= 0 ? 'text-moss' : 'text-ember'}>{gold(profit)}</span>} sub={`incl. ${gold(b.purchasePrice + (b.landCost ?? 0))}g to open`} />
         <Stat label="Revenue" value={gold(b.totals.revenue)} />
         <Stat label="Expenses" value={gold(b.totals.expenses)} />
         <Stat label="Produced" value={b.totals.produced.toFixed(0)} sub={out ? Object.keys(out).join(', ') : 'storage & rent'} />
@@ -140,15 +256,16 @@ function Detail({ b, me, world }: { b: OwnedBiz; me: Me; world: PublicSnapshot }
         <div className="panel p-4">
           <div className="label mb-2">Workforce</div>
           <div className="num text-2xl font-bold">{b.workers} <span className="text-sm text-muted">/ {b.maxWorkers}</span></div>
-          <div className="text-[11px] text-muted">{b.def.wage}g per worker per day · signing fee {b.def.wage * 2}g</div>
+          <div className="text-[11px] text-muted">{gold(b.def.wage * landDef(b.city).wages)}g per worker per day in {CITY_DEFS[b.city].name} · signing fee {b.def.wage * 2}g</div>
           <div className="mt-3 flex gap-2">
             <button disabled={busy || b.workers >= b.maxWorkers} onClick={() => run({ type: 'business.hire', businessId: b.id }, 'Worker hired')} className="btn btn-gold flex-1 py-1.5 text-sm">Hire</button>
             <button disabled={busy || b.workers <= 0} onClick={() => run({ type: 'business.fire', businessId: b.id }, 'Worker dismissed')} className="btn btn-ghost flex-1 py-1.5 text-sm">Dismiss</button>
           </div>
-          <div className="mt-4 label">Level {b.level} / 3</div>
-          <button disabled={busy || b.upgradeCost == null || me.player.gold < (b.upgradeCost ?? 0)} onClick={() => run({ type: 'business.upgrade', businessId: b.id }, `Upgraded to level ${b.level + 1}`)} className="btn btn-ghost mt-2 w-full py-1.5 text-sm">
-            {b.upgradeCost == null ? 'Fully upgraded' : `Upgrade · ${b.upgradeCost}g`}
+          <div className="mt-4 flex items-center justify-between"><span className="label">Level {b.level} / {b.maxLevel}</span><LevelPips level={b.level} max={b.maxLevel} /></div>
+          <button disabled={busy || b.upgradeCost == null || me.player.gold < (b.upgradeCost ?? 0) || me.player.level < b.upgradeNeedsLevel} onClick={() => run({ type: 'business.upgrade', businessId: b.id }, `Upgraded to level ${b.level + 1}`)} className="btn btn-ghost mt-2 w-full py-1.5 text-sm">
+            {b.upgradeCost == null ? 'Fully upgraded' : me.player.level < b.upgradeNeedsLevel ? `Level ${b.level + 1} needs player Lv ${b.upgradeNeedsLevel}` : `Upgrade to Lv ${b.level + 1} · ${gold(b.upgradeCost)}g`}
           </button>
+          {b.level < b.maxLevel && <p className="mt-1 text-[11px] text-muted">Next level: {b.def.maxWorkers[b.level]} workers, {b.def.capacity[b.level] || b.def.storageBonus?.[b.level] || 0} {b.kind === 'warehouse' ? 'storage' : 'capacity'}, ×{b.def.efficiency[b.level]} efficiency.</p>}
         </div>
         <div className="panel p-4">
           <div className="label mb-2">Stock · {used.toFixed(0)} / {b.capacity || '—'}</div>
@@ -157,10 +274,11 @@ function Detail({ b, me, world }: { b: OwnedBiz; me: Me; world: PublicSnapshot }
             {Object.entries(b.inventory).filter(([, q]) => (q ?? 0) > 0.05).map(([r, q]) => <span key={r} className="flex items-center gap-1 rounded-md bg-black/30 px-2 py-0.5 text-xs"><ResourceIcon r={r} size={14} />{(q ?? 0).toFixed(1)}</span>)}
             {b.caravan && <span className="text-xs text-river">Caravan en route to {b.caravan.to}</span>}
           </div>
-          <button disabled={busy || used < 1} onClick={() => run({ type: 'business.collect', businessId: b.id }, 'Goods moved to your warehouse')} className="btn btn-ghost mt-3 w-full py-1.5 text-sm">Collect to warehouse</button>
+          <button disabled={busy || used < 1} onClick={() => run({ type: 'business.collect', businessId: b.id }, b.city === 'nearhaven' ? 'Goods moved to your warehouse' : `Goods moved to your ${CITY_DEFS[b.city].name} depot`)} className="btn btn-ghost mt-3 w-full py-1.5 text-sm">{b.city === 'nearhaven' ? 'Collect to warehouse' : `Collect to ${CITY_DEFS[b.city].name} depot`}</button>
           {b.def.recipes.length > 0 && (
             <div className="mt-3 space-y-2 text-xs">
-              <label className="flex items-center justify-between"><span>Auto-buy inputs</span><input type="checkbox" checked={b.policy.autoBuyInputs} onChange={(e) => run({ type: 'business.policy', businessId: b.id, policy: { autoBuyInputs: e.target.checked } })} /></label>
+              <label className="flex items-center justify-between"><span>Use my stock in {CITY_DEFS[b.city].name} first</span><input type="checkbox" checked={!!b.policy.supplyFromStore} onChange={(e) => run({ type: 'business.policy', businessId: b.id, policy: { supplyFromStore: e.target.checked } })} /></label>
+              <label className="flex items-center justify-between"><span>Auto-buy inputs (only while profitable)</span><input type="checkbox" checked={b.policy.autoBuyInputs} onChange={(e) => run({ type: 'business.policy', businessId: b.id, policy: { autoBuyInputs: e.target.checked } })} /></label>
               <label className="flex items-center justify-between"><span>Auto-sell output</span><input type="checkbox" checked={b.policy.autoSell} onChange={(e) => run({ type: 'business.policy', businessId: b.id, policy: { autoSell: e.target.checked } })} /></label>
               <div className="flex items-center gap-2">
                 <span className="shrink-0">Min sell price</span>
@@ -175,11 +293,12 @@ function Detail({ b, me, world }: { b: OwnedBiz; me: Me; world: PublicSnapshot }
                   </select>
                 </div>
               )}
-              {out && <div className="text-muted">Market price of output: {Object.keys(out).map((r) => `${RESOURCE_DEFS[r as keyof typeof RESOURCE_DEFS].label} ${gold(world.markets.nearhaven.resources[r as keyof typeof RESOURCE_DEFS].price)}g`).join(', ')}</div>}
+              {out && <div className="text-muted">Market price of output: {Object.keys(out).map((r) => `${RESOURCE_DEFS[r as keyof typeof RESOURCE_DEFS].label} ${gold(world.markets[b.city].resources[r as keyof typeof RESOURCE_DEFS].price)}g in ${CITY_DEFS[b.city].name}`).join(', ')}</div>}
             </div>
           )}
         </div>
       </div>
+      <SellBox b={b} />
       <div className="rounded-xl border border-near/30 bg-near/5 p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -194,6 +313,34 @@ function Detail({ b, me, world }: { b: OwnedBiz; me: Me; world: PublicSnapshot }
         </div>
       </div>
       {b.history.length === 0 && <Empty>Financial history appears after the first full day of trading.</Empty>}
+    </div>
+  );
+}
+
+function SellBox({ b }: { b: OwnedBiz }) {
+  const { run, busy } = useAction();
+  const [confirm, setConfirm] = useState(false);
+  const offer = b.sale.total * 0.9;
+  const deeded = !!b.deedTokenId || !!b.chainOwner;
+  return (
+    <div className="panel p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="label mb-1">Value & sale</div>
+          <div className="num text-lg font-bold">{gold(b.sale.total)}g</div>
+          <div className="text-[11px] text-muted">{gold(b.sale.assets)}g buildings · {gold(b.sale.goodwill)}g goodwill (20 days of recent profit) · {gold(b.sale.land)}g land</div>
+        </div>
+        {deeded ? (
+          <p className="max-w-[220px] text-[11px] text-muted">This business is a NEAR deed. Sell it on the deed marketplace in the Wallet panel.</p>
+        ) : confirm ? (
+          <div className="flex gap-2">
+            <button disabled={busy} onClick={async () => { await run({ type: 'business.sell', businessId: b.id }, `Sold ${b.name}`); setConfirm(false); }} className="btn btn-gold px-3 py-1.5 text-sm">Confirm · {gold(offer)}g</button>
+            <button onClick={() => setConfirm(false)} className="btn btn-ghost px-3 py-1.5 text-sm">Keep it</button>
+          </div>
+        ) : (
+          <button disabled={busy || !!b.caravan} onClick={() => setConfirm(true)} className="btn btn-ghost px-3 py-1.5 text-sm">Sell to local investors · {gold(offer)}g</button>
+        )}
+      </div>
     </div>
   );
 }

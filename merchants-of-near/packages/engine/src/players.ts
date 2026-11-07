@@ -6,7 +6,7 @@ import { bumpMetric, evaluateProgression, refreshMissions } from './progression'
 import { playerCapacity } from './businesses';
 import { logDecision, remember, ROLE_SPECS } from './merchants';
 import { playerNetWorth } from './valuation';
-import { DEPOT_CAPACITY, hasAccess, storeFor, totalHeld } from './logistics';
+import { depotCapacity, hasAccess, storeFor, totalHeld } from './logistics';
 import { CITY_DEFS } from './cities';
 
 export const isResource = (r: unknown): r is Resource => typeof r === 'string' && (RESOURCES as readonly string[]).includes(r);
@@ -43,6 +43,8 @@ export function registerPlayer(world: WorldState, id: string, name: string): Res
     marketAccess: ['nearhaven'],
     charters: [],
     depots: {},
+    land: [],
+    taxArrears: 0,
   };
   world.players[id] = p;
   refreshMissions(world, p);
@@ -100,7 +102,7 @@ export function playerTrade(world: WorldState, playerId: string, req: TradeReque
   let realized = 0;
   if (req.side === 'buy') {
     if (p.gold < quote.total) return fail(`Not enough gold: need ${fmt(quote.total)}, have ${fmt(p.gold)}`);
-    const cap = marketId === 'nearhaven' ? playerCapacity(world, playerId) : DEPOT_CAPACITY;
+    const cap = marketId === 'nearhaven' ? playerCapacity(world, playerId) : depotCapacity(p, marketId, world);
     const free = cap - invTotal(store) - (marketId === 'nearhaven' ? 0 : Object.values(world.shipments).filter((x) => x.ownerId === p.id && x.to === marketId).reduce((a, x) => a + x.qty, 0));
     if (qty > free) return fail(`${marketId === 'nearhaven' ? 'Warehouse' : `${CITY_DEFS[marketId].name} depot`} full: room for ${Math.max(0, Math.floor(free))} more units`);
     // -- validated; mutate --

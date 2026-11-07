@@ -1,6 +1,8 @@
 import { RESOURCES, type MarketId } from './config';
 import type { Inventory, MerchantState, PlayerState, WorldState, ActorRef } from './types';
 import { money } from './internal';
+import { businessSaleValue } from './businesses';
+import { landHoldingsValue } from './property';
 
 /** Liquidation value of goods at a city's mid prices (10% haircut); Nearhaven by default. */
 export function inventoryValue(world: WorldState, inv: Inventory, city: MarketId = 'nearhaven'): number {
@@ -33,7 +35,7 @@ export function businessValue(world: WorldState, playerId: string): number {
   let v = 0;
   for (const b of Object.values(world.businesses)) {
     if (b.ownerId !== playerId) continue;
-    v += b.purchasePrice * (0.6 + 0.2 * (b.level - 1)) + inventoryValue(world, b.inventory);
+    v += businessSaleValue(world, b).total + inventoryValue(world, b.inventory, b.city ?? 'nearhaven');
     if (b.caravan) v += inventoryValue(world, b.caravan.cargo);
   }
   return money(v);
@@ -61,6 +63,7 @@ export function playerNetWorth(world: WorldState, p: PlayerState): number {
     p.gold +
       inventoryValue(world, p.inventory) +
       depotValue(world, p) +
+      landHoldingsValue(world, p) +
       businessValue(world, p.id) +
       investmentValue(world, p.id) +
       escrowValue(world, p.id) -

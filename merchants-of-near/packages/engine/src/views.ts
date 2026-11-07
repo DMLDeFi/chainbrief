@@ -1,10 +1,11 @@
 import { MARKETS, RESOURCES, TIME, type MarketId } from './config';
 import { CITY_DEFS } from './cities';
-import { DEPOT_CAPACITY } from './logistics';
-import type { WorldState } from './types';
+import { DEPOT_CAPACITY, depotCapacity, hasAccess } from './logistics';
+import type { BusinessKind, WorldState } from './types';
 import { dayOf, hourOf, invTotal, money } from './internal';
 import { merchantNetWorth, playerNetWorth, shareValue, debtOf } from './valuation';
-import { BUSINESS_DEFS, businessCapacity, businessMaxWorkers, playerCapacity } from './businesses';
+import { BUSINESS_DEFS, businessCapacity, businessMaxWorkers, businessQuote, businessSaleValue, MAX_BUSINESS_LEVEL, overheadFactor, playerCapacity, UPGRADE_LEVEL_REQ, upgradeCostOf } from './businesses';
+import { affinity, LAND_TAX, landDef, landPrice, landValue, plotsTaken, prosperity } from './property';
 import { LEVELS, levelTitle, nextLevelRequirements, ACHIEVEMENTS } from './progression';
 import { warehouseExpansionCost } from './players';
 import { activeLoansOf, evaluateCredit } from './banking';
@@ -71,7 +72,11 @@ export function publicSnapshot(world: WorldState, feedSince = 0) {
       lastDecision: m.decisions[m.decisions.length - 1] ?? null,
       lastTradeTick: m.memory.length ? m.memory[m.memory.length - 1].tick : -1,
     })),
-    businesses: Object.values(world.businesses).map((b) => ({ id: b.id, kind: b.kind, plot: b.plot, level: b.level, owner: world.players[b.ownerId]?.name ?? '?', ownerId: b.ownerId })),
+    businesses: Object.values(world.businesses).map((b) => ({ id: b.id, kind: b.kind, city: b.city ?? 'nearhaven', plot: b.plot, level: b.level, owner: world.players[b.ownerId]?.name ?? '?', ownerId: b.ownerId })),
+    /** Vacant plots players hold as property (drawn as fenced, sold plots in town). */
+    land: Object.values(world.players).flatMap((p) => (p.land ?? []).map((l) => ({ city: l.city, plot: l.plot, owner: p.name, ownerId: p.id }))),
+    /** Land market in each city. */
+    cityLand: Object.fromEntries(MARKETS.map((id) => [id, { plots: landDef(id).plots, taken: plotsTaken(world, id), price: landPrice(world, id), value: landValue(world, id), prosperity: Math.round(prosperity(world, id) * 100) / 100 }])) as Record<MarketId, { plots: number; taken: number; price: number; value: number; prosperity: number }>,
     feed: world.feed.filter((f) => f.id > feedSince).slice(-60),
     players: Object.keys(world.players).length,
     cities: Object.fromEntries(MARKETS.map((id) => [id, { population: id === 'nearhaven' ? world.population : (world.cities?.[id]?.population ?? CITY_DEFS[id].population) }])) as Record<MarketId, { population: number }>,
@@ -105,7 +110,18 @@ export function playerView(world: WorldState, playerId: string) {
   if (!p) return null;
   const businesses = Object.values(world.businesses)
     .filter((b) => b.ownerId === playerId)
-    .map((b) => ({ ...b, def: BUSINESS_DEFS[b.kind], capacity: businessCapacity(b), maxWorkers: businessMaxWorkers(b), upgradeCost: b.level < 3 ? BUSINESS_DEFS[b.kind].upgradeCost[b.level - 1] : null }));
+    .map((b) => ({
+      ...b,
+      city: b.city ?? 'nearhaven',
+      def: BUSINESS_DEFS[b.kind],
+      capacity: businessCapacity(b),
+      maxWorkers: businessMaxWorkers(b),
+      maxLevel: MAX_BUSINESS_LEVEL,
+      upgradeCost: upgradeCostOf(b),
+      upgradeNeedsLevel: b.level < MAX_BUSINESS_LEVEL ? UPGRADE_LEVEL_REQ[b.level + 1] ?? 0 : 0,
+      affinity: affinity(b.city ?? 'nearhaven', b.kind),
+      sale: businessSaleValue(world, b),
+    }));
   const investments = Object.values(world.merchants)
     .filter((m) => m.investors[playerId])
     .map((m) => ({ merchantId: m.id, name: m.name, shares: m.investors[playerId], value: money(m.investors[playerId] * shareValue(world, m)), status: m.status }));
@@ -123,8 +139,14 @@ export function playerView(world: WorldState, playerId: string) {
     credit: { ...p.credit, offer: evaluateCredit(world, { kind: 'player', id: playerId }, 50) },
     listings: Object.values(world.listings).filter((l) => l.sellerId === playerId && l.status === 'open'),
     charters: p.charters ?? [],
+    land: (p.land ?? []).map((l) => ({ ...l, value: landValue(world, l.city), tax: money(landValue(world, l.city) * LAND_TAX) })),
+    taxArrears: money(p.taxArrears ?? 0),
+    overhead: overheadFactor(world, playerId),
+    /** Building quotes for every kind in every city the player can build in. */
+    quotes: Object.fromEntries(MARKETS.filter((c) => hasAccess(p, c)).map((c) => [c, Object.fromEntries((Object.keys(BUSINESS_DEFS) as BusinessKind[]).map((k) => [k, businessQuote(world, playerId, k, c)]))])),
     depots: p.depots ?? {},
     depotCapacity: DEPOT_CAPACITY,
+    depotCapacities: Object.fromEntries(MARKETS.filter((c) => c !== 'nearhaven').map((c) => [c, depotCapacity(p, c, world)])),
     shipments: Object.values(world.shipments ?? {}).filter((s) => s.ownerId === playerId),
   };
 }

@@ -196,6 +196,13 @@ export function WorldMap({ world, me, onClose, onVisit, viewCity }: { world: Pub
               <p className="mt-1.5 text-[11px] text-muted">Cheaper here than at home (left) and dearer (right). Price gaps are what caravans profit from.</p>
             </div>
           )}
+          {world.cityLand && (
+            <div className="grid grid-cols-3 gap-1.5 text-center text-[11px]">
+              <div className="rounded-lg border border-line/50 bg-black/20 px-2 py-1.5"><div className="text-muted">Plots</div><div className="num font-bold text-parchment">{world.cityLand[sel].taken}/{world.cityLand[sel].plots}</div></div>
+              <div className="rounded-lg border border-line/50 bg-black/20 px-2 py-1.5"><div className="text-muted">Next plot</div><div className="num font-bold text-parchment">{gold(world.cityLand[sel].price)}g</div></div>
+              <div className="rounded-lg border border-line/50 bg-black/20 px-2 py-1.5"><div className="text-muted">Yours</div><div className="num font-bold text-parchment">{me.player.businesses.filter((b) => b.city === sel).length} biz · {me.player.land.filter((l) => l.city === sel).length} land</div></div>
+            </div>
+          )}
           {hasOffice(sel) ? (
             <div className="rounded-xl border border-moss/40 bg-moss/10 p-3 text-xs text-parchment-dim">
               {sel === 'nearhaven' ? 'Your home city: your warehouse and businesses are here.' : <>You have a trading office here. Trade from the Marketplace ({world.markets[sel].name}) and ship goods from the Inventory panel.</>}

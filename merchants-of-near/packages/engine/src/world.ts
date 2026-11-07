@@ -5,6 +5,7 @@ import { createMarket, unitPrice, updatePressure } from './market';
 import { citizenBaseDemand, demandFactor, maybeStartEvent, productionFactor, updateSeason, updateWeather } from './environment';
 import { merchantDaily, runMerchants } from './merchants';
 import { businessDaily, runBusiness } from './businesses';
+import { landTaxDaily } from './property';
 import { collectLoans } from './banking';
 import { playerDaily } from './players';
 import { evaluateProgression } from './progression';
@@ -36,6 +37,7 @@ export function createWorld(seed = 20260101): WorldState {
     nextId: 0,
     nextFeedId: 0,
     plotsUsed: [],
+    landUse: Object.fromEntries(MARKETS.map((id) => [id, [] as number[]])) as WorldState['landUse'],
     ledger: [],
     guildTreasury: 500,
     reported: Object.fromEntries(MARKETS.map((id) => [id, { price: { ...markets[id].price }, stock: { ...markets[id].stock } }])) as WorldState['reported'],
@@ -169,7 +171,7 @@ function daily(world: WorldState): void {
   recirculate(world);
   for (const b of Object.values(world.businesses)) businessDaily(world, b);
   collectLoans(world);
-  for (const p of Object.values(world.players)) playerDaily(world, p);
+  for (const p of Object.values(world.players)) { landTaxDaily(world, p); playerDaily(world, p); }
 
   // Population responds to how well the town was fed.
   const sat = world.stats.dayFoodSatisfaction / TIME.ticksPerDay;

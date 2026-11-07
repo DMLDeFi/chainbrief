@@ -129,7 +129,7 @@ function CityStores({ world, me }: { world: PublicSnapshot; me: Me }) {
           const goods = RESOURCES.filter((x) => (inv[x] ?? 0) >= 1);
           return (
             <div key={c} className="rounded-xl border border-line/60 bg-black/20 px-3 py-2 text-sm">
-              <div className="flex items-center justify-between"><span className="font-semibold">{CITY_DEFS[c].name} depot</span><span className="num text-xs text-muted">{Math.round(used)} / {p.depotCapacity}</span></div>
+              <div className="flex items-center justify-between"><span className="font-semibold">{CITY_DEFS[c].name} depot</span><span className="num text-xs text-muted">{Math.round(used)} / {p.depotCapacities[c as Exclude<MarketId, 'nearhaven'>] ?? p.depotCapacity}</span></div>
               <div className="mt-1 flex flex-wrap gap-2 text-xs text-parchment-dim">
                 {goods.length ? goods.map((x) => <span key={x} className="flex items-center gap-1"><ResourceIcon r={x} size={14} />{Math.floor(inv[x] ?? 0)} {x} <span className="text-muted">@ {gold(world.markets[c].resources[x].price)}</span></span>) : <span className="text-muted">Empty</span>}
               </div>

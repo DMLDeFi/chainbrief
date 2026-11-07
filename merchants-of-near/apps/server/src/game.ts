@@ -1,4 +1,7 @@
 import {
+  buyLand,
+  sellBusiness,
+  sellLand,
   MARKETS,
   charterCity,
   migrateWorld,
@@ -41,7 +44,10 @@ const city = z.enum(MARKETS);
 /** Every player action is validated against this schema before it reaches the engine. */
 export const ActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('trade'), side: z.enum(['buy', 'sell']), resource, qty, market: city.optional(), limitPrice: z.number().positive().optional() }),
-  z.object({ type: z.literal('business.buy'), kind: z.enum(['farm', 'bakery', 'blacksmith', 'textile', 'warehouse', 'trading']) }),
+  z.object({ type: z.literal('business.buy'), kind: z.enum(['farm', 'bakery', 'blacksmith', 'textile', 'warehouse', 'trading']), city: city.optional() }),
+  z.object({ type: z.literal('business.sell'), businessId: id }),
+  z.object({ type: z.literal('land.buy'), city }),
+  z.object({ type: z.literal('land.sell'), city }),
   z.object({ type: z.literal('business.hire'), businessId: id }),
   z.object({ type: z.literal('business.fire'), businessId: id }),
   z.object({ type: z.literal('business.upgrade'), businessId: id }),
@@ -49,7 +55,7 @@ export const ActionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('business.policy'),
     businessId: id,
-    policy: z.object({ autoBuyInputs: z.boolean().optional(), autoSell: z.boolean().optional(), minSellPrice: z.number().min(0).max(10000).optional(), product: resource.optional() }),
+    policy: z.object({ autoBuyInputs: z.boolean().optional(), autoSell: z.boolean().optional(), supplyFromStore: z.boolean().optional(), minSellPrice: z.number().min(0).max(10000).optional(), product: resource.optional() }),
   }),
   z.object({ type: z.literal('warehouse.expand') }),
   z.object({ type: z.literal('invest'), merchantId: id, amount: gold }),
@@ -175,7 +181,16 @@ export class GameService {
         r = shipGoods(w, userId, action);
         break;
       case 'business.buy':
-        r = buyBusiness(w, userId, action.kind);
+        r = buyBusiness(w, userId, action.kind, action.city ?? 'nearhaven');
+        break;
+      case 'business.sell':
+        r = sellBusiness(w, userId, action.businessId);
+        break;
+      case 'land.buy':
+        r = buyLand(w, userId, action.city);
+        break;
+      case 'land.sell':
+        r = sellLand(w, userId, action.city);
         break;
       case 'business.hire':
         r = hireWorker(w, userId, action.businessId);

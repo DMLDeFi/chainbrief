@@ -346,11 +346,12 @@ export class TownScene extends Phaser.Scene {
       img.on('pointerout', () => this.hoverLabel.setVisible(false));
     });
     // Pre-render player building styles at each level.
+    // Each level adds height and windows; level 3 gains a chimney if it had none.
     for (const kind of ['farm', 'bakery', 'blacksmith', 'textile', 'warehouse', 'trading']) {
-      for (let lv = 1; lv <= 3; lv++) {
+      for (let lv = 1; lv <= 5; lv++) {
         const base = SPECS[`p-${kind}`];
         if (this.textures.exists(`pb-${kind}-${lv}`)) this.textures.remove(`pb-${kind}-${lv}`);
-        metaCache.set(`pb-${kind}-${lv}`, drawBuilding(this, `pb-${kind}-${lv}`, { ...base, h: base.h + (lv - 1) * 6, windows: base.windows + (lv - 1), chimney: lv === 3 && !base.chimney ? 'left' : base.chimney }));
+        metaCache.set(`pb-${kind}-${lv}`, drawBuilding(this, `pb-${kind}-${lv}`, { ...base, h: base.h + (lv - 1) * 6, windows: base.windows + Math.min(3, lv - 1), chimney: lv >= 3 && !base.chimney ? 'left' : base.chimney }));
       }
     }
   }
@@ -733,27 +734,38 @@ export class TownScene extends Phaser.Scene {
 
   private syncPlots(snap: PublicSnapshot) {
     const me = this.cb.getPlayerId();
-    const key = snap.businesses.map((b) => `${b.id}:${b.plot}:${b.kind}:${b.ownerId}:${b.level}`).join('|') + `|${me}`;
+    // The isometric town is Nearhaven: businesses and land elsewhere appear on the world map.
+    const here = snap.businesses.filter((b) => (b.city ?? 'nearhaven') === 'nearhaven');
+    const land = (snap.land ?? []).filter((l) => l.city === 'nearhaven');
+    const key = here.map((b) => `${b.id}:${b.plot}:${b.kind}:${b.ownerId}:${b.level}`).join('|') + '|' + land.map((l) => `${l.plot}:${l.ownerId}`).join(',') + `|${me}`;
     if (key === this.plotKey) return;
     this.plotKey = key;
+    const dead = new Set<Phaser.GameObjects.GameObject>(this.plotLayer);
+    this.glows = this.glows.filter((g) => !dead.has(g.img));
     this.plotLayer.forEach((o) => o.destroy());
     this.plotLayer = [];
     PLOTS.forEach((pl, i) => {
-      const biz = snap.businesses.find((b) => b.plot === i);
+      const biz = here.find((b) => b.plot === i);
       if (!biz) {
+        const owned = land.find((l) => l.plot === i);
+        const mine = owned?.ownerId === me;
         const p = iso(pl.gx + 1, pl.gy + 1);
         const g = this.add.graphics().setDepth(-9000);
-        g.fillStyle(0xf4c96b, 0.07);
+        const tint = owned ? (mine ? 0x00ec97 : 0xd2643a) : 0xf4c96b;
+        g.fillStyle(tint, owned ? 0.12 : 0.07);
         const n = iso(pl.gx, pl.gy), e = iso(pl.gx + 2, pl.gy), s = iso(pl.gx + 2, pl.gy + 2), w = iso(pl.gx, pl.gy + 2);
         g.fillPoints([n, e, s, w], true);
-        g.lineStyle(1.5, 0xf4c96b, 0.4);
+        g.lineStyle(owned ? 2 : 1.5, tint, owned ? 0.7 : 0.4);
         g.strokePoints([n, e, s, w], true);
         const sign = this.add.image(p.x, p.y + 4, 'signpost').setOrigin(0.5, 1).setDepth(p.y + 4);
-        this.makeInteractive(sign, 'Empty plot — open a business here', () => this.cb.onSelect({ type: 'plot', plot: i }));
+        if (owned) sign.setTint(mine ? 0xb8ffe0 : 0xffc8b0);
+        const label = owned ? (mine ? 'Your land — open a business here' : `Sold — ${owned.owner}'s land`) : 'Empty plot — open a business here';
+        this.makeInteractive(sign, label, () => this.cb.onSelect({ type: 'plot', plot: i, ownerId: owned?.ownerId }));
         this.plotLayer.push(g, sign);
+        if (mine) { const f = iso(pl.gx + 0.2, pl.gy + 2); this.plotLayer.push(this.add.image(f.x, f.y, 'flag').setOrigin(0.1, 1).setDepth(p.y + 5)); }
         return;
       }
-      const lv = Math.max(1, Math.min(3, biz.level));
+      const lv = Math.max(1, Math.min(5, biz.level));
       const key = `pb-${biz.kind}-${lv}`;
       const art = drawBuildingMeta(this, key);
       const img = this.placeBuilding({ gx: pl.gx, gy: pl.gy, w: 2, d: 2 }, art);
@@ -762,7 +774,9 @@ export class TownScene extends Phaser.Scene {
       const extras: Phaser.GameObjects.GameObject[] = [];
       this.addLights(art, img, extras);
       this.plotLayer.push(...extras);
-      if (lv >= 2) for (const w of art.windows.slice(0, 2)) this.plotLayer.push(this.add.image(img.x + w.x, img.y + w.y + 7, 'flowerbox').setDepth(img.depth + 0.5));
+      // Growth is visible: every level is a little larger and adds yard dressing.
+      img.setScale(0.94 + 0.035 * (lv - 1));
+      this.plotLayer.push(...this.levelDressing(biz.kind, lv, pl, img, art, i));
       if (biz.ownerId === me) {
         const f = iso(pl.gx + 0.2, pl.gy + 2);
         this.plotLayer.push(this.add.image(f.x, f.y, 'flag').setOrigin(0.1, 1).setDepth(img.depth + 1));
@@ -771,7 +785,55 @@ export class TownScene extends Phaser.Scene {
       const prevLv = this.bizLevels.get(biz.id);
       if (!this.firstSnap && (prevLv === undefined || prevLv < biz.level)) this.construct(img, pl);
     });
-    this.bizLevels = new Map(snap.businesses.map((b) => [b.id, b.level]));
+    this.bizLevels = new Map(here.map((b) => [b.id, b.level]));
+  }
+
+  /** Yard props that make a business's level readable at a glance (levels 1–5). */
+  private levelDressing(kind: string, lv: number, pl: { gx: number; gy: number }, img: Phaser.GameObjects.Image, art: { windows: Array<{ x: number; y: number }> }, seed: number) {
+    const out: Phaser.GameObjects.GameObject[] = [];
+    const put = (key: string, gx: number, gy: number, o: { scale?: number; tint?: number; oy?: number } = {}) => {
+      if (!this.textures.exists(key)) return null;
+      const q = iso(pl.gx + gx, pl.gy + gy);
+      const im = this.add.image(q.x, q.y + (o.oy ?? 0), key).setOrigin(0.5, 1).setDepth(q.y + 1).setScale(o.scale ?? 1);
+      if (o.tint) im.setTint(o.tint);
+      out.push(im);
+      return im;
+    };
+    if (lv >= 4) {
+      // A paved yard.
+      const g = this.add.graphics().setDepth(-8990);
+      g.fillStyle(0xd9ccb0, 0.55);
+      g.fillPoints([iso(pl.gx - 0.05, pl.gy - 0.05), iso(pl.gx + 2.05, pl.gy - 0.05), iso(pl.gx + 2.05, pl.gy + 2.05), iso(pl.gx - 0.05, pl.gy + 2.05)], true);
+      g.lineStyle(1.5, 0xb8a888, 0.8);
+      g.strokePoints([iso(pl.gx - 0.05, pl.gy - 0.05), iso(pl.gx + 2.05, pl.gy - 0.05), iso(pl.gx + 2.05, pl.gy + 2.05), iso(pl.gx - 0.05, pl.gy + 2.05)], true);
+      out.push(g);
+    }
+    if (lv >= 2) {
+      const goods = kind === 'farm' ? 'haystack' : kind === 'bakery' ? 'sack' : kind === 'blacksmith' ? 'crate' : kind === 'textile' ? 'sack' : 'barrel';
+      put(goods, 1.95, 1.55, { scale: 0.8 });
+      if (lv >= 3) put(goods === 'barrel' ? 'crate' : 'barrel', 1.7, 2.0, { scale: 0.8 });
+    }
+    const windows = lv >= 5 ? art.windows : lv >= 2 ? art.windows.slice(0, lv >= 4 ? 4 : 2) : [];
+    for (const w of windows) out.push(this.add.image(img.x + w.x, img.y + w.y + 7, 'flowerbox').setDepth(img.depth + 0.5));
+    if (lv >= 3) {
+      put('lamp2', 0.15, 2.0);
+      put('fence-a', 0.75, 2.12, { scale: 0.85 });
+    }
+    if (lv >= 4) {
+      put('banner', 2.1, 0.55);
+      put('cart', 0.35, 1.2, { scale: 0.75 });
+    }
+    if (lv >= 5) {
+      put('banner', 2.1, 1.25, { tint: 0xffd36b });
+      for (const [gx, gy] of [[0.15, 0.2], [2.0, 2.15]] as const) {
+        put('lantern', gx, gy, { tint: 0xffe2a0 });
+        const q = iso(pl.gx + gx, pl.gy + gy);
+        const glow = this.add.image(q.x, q.y - 12, 'glow').setBlendMode(Phaser.BlendModes.ADD).setScale(0.3).setTint(0xffc46b).setDepth(q.y + 2);
+        this.glows.push({ img: glow, seed: seed + gx, base: 1 });
+        out.push(glow);
+      }
+    }
+    return out;
   }
 
   private construct(img: Phaser.GameObjects.Image, pl: { gx: number; gy: number }) {

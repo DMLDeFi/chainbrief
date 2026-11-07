@@ -172,6 +172,25 @@ describe('authoritative actions', () => {
     expect(me.player.shipments).toHaveLength(0);
   });
 
+  it('buys land, builds in another city and sells a business through the API', async () => {
+    const { cookie } = await register();
+    const me0 = (await ctx.app.inject({ method: 'GET', url: '/api/me', headers: { cookie } })).json();
+    ctx.game.world.players[me0.player.id].gold = 2000;
+    expect((await act(cookie, { type: 'land.buy', city: 'goldenvale' })).statusCode).toBe(422); // no office yet
+    expect((await act(cookie, { type: 'city.charter', city: 'goldenvale' })).statusCode).toBe(200);
+    expect((await act(cookie, { type: 'land.buy', city: 'goldenvale' })).statusCode).toBe(200);
+    const built = await act(cookie, { type: 'business.buy', kind: 'farm', city: 'goldenvale' });
+    expect(built.statusCode, built.body).toBe(200);
+    expect(built.json().data.city).toBe('goldenvale');
+    let me = (await ctx.app.inject({ method: 'GET', url: '/api/me', headers: { cookie } })).json();
+    expect(me.player.land).toHaveLength(0); // built on the plot it bought
+    expect(me.player.businesses[0].sale.total).toBeGreaterThan(0);
+    expect((await act(cookie, { type: 'business.sell', businessId: built.json().data.id })).statusCode).toBe(200);
+    me = (await ctx.app.inject({ method: 'GET', url: '/api/me', headers: { cookie } })).json();
+    expect(me.player.businesses).toHaveLength(0);
+    expect((await act(cookie, { type: 'land.buy', city: 'atlantis' })).statusCode).toBe(400);
+  });
+
   it('records every gold movement in the ledger', async () => {
     const { cookie } = await register();
     await act(cookie, { type: 'trade', side: 'buy', resource: 'wheat', qty: 3 });

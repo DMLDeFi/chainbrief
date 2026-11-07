@@ -4,6 +4,7 @@ import { addInv, fail, fmt, invTotal, money, newId, ok, pushFeed } from './inter
 import { CITY_DEFS, findPath, freightCost, travelTicks } from './cities';
 import { createMarket } from './market';
 import { bumpMetric } from './progression';
+import { warehouseBonus } from './businesses';
 
 /** Units a trading office's depot can hold in another city. */
 export const DEPOT_CAPACITY = 80;
@@ -20,8 +21,10 @@ export function storeFor(p: PlayerState, city: MarketId): Inventory {
   if (city === 'nearhaven') return p.inventory;
   return (p.depots[city] ??= {});
 }
-export function depotCapacity(_p: PlayerState, city: MarketId): number {
-  return city === 'nearhaven' ? Infinity : DEPOT_CAPACITY;
+export function depotCapacity(p: PlayerState, city: MarketId, world?: WorldState): number {
+  if (city === 'nearhaven') return Infinity;
+  // A warehouse you own in that city enlarges the depot.
+  return DEPOT_CAPACITY + (world ? warehouseBonus(world, p.id, city) : 0);
 }
 /** Units already promised to a depot by shipments still on the road. */
 function incoming(world: WorldState, ownerId: string, city: MarketId): number {
@@ -74,7 +77,7 @@ export function shipGoods(world: WorldState, playerId: string, req: { from: unkn
   const src = storeFor(p, req.from);
   if ((src[r] ?? 0) < qty) return fail(`You only have ${Math.floor(src[r] ?? 0)} ${r} in ${CITY_DEFS[req.from].name}`);
   if (req.to !== 'nearhaven') {
-    const room = depotCapacity(p, req.to) - invTotal(storeFor(p, req.to)) - incoming(world, p.id, req.to);
+    const room = depotCapacity(p, req.to, world) - invTotal(storeFor(p, req.to)) - incoming(world, p.id, req.to);
     if (qty > room) return fail(`The ${CITY_DEFS[req.to].name} depot has room for ${Math.max(0, Math.floor(room))} more units`);
   }
   const cost = freightCost(req.from, req.to, qty);
@@ -118,9 +121,21 @@ export function migrateWorld(world: WorldState): WorldState {
   world.cities ??= {} as WorldState['cities'];
   for (const id of MARKETS) world.cities[id] ??= { population: id === 'nearhaven' ? world.population : CITY_DEFS[id].population };
   world.shipments ??= {};
+  // Land: every existing business stood in Nearhaven, on the plots in plotsUsed.
+  if (!world.landUse) {
+    world.landUse = Object.fromEntries(MARKETS.map((id) => [id, [] as number[]])) as WorldState['landUse'];
+    world.landUse.nearhaven = [...(world.plotsUsed ?? [])];
+  }
+  for (const id of MARKETS) world.landUse[id] ??= [];
+  for (const b of Object.values(world.businesses)) {
+    b.city ??= 'nearhaven';
+    if (!world.landUse[b.city].includes(b.plot)) world.landUse[b.city].push(b.plot);
+  }
   for (const p of Object.values(world.players)) {
     p.charters ??= [];
     p.depots ??= {};
+    p.land ??= [];
+    p.taxArrears ??= 0;
     // The old Port Aurora unlock becomes a proper office with a depot.
     if (p.marketAccess?.includes('aurora') && !p.charters.includes('aurora')) p.charters.push('aurora');
   }

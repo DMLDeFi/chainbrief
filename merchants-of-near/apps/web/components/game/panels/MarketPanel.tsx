@@ -112,7 +112,7 @@ function TradeBox({ market, marketId, r, me }: { market: PublicSnapshot['markets
   const store = home ? p.inventory : (p.depots[marketId] ?? {});
   const held = Math.floor(store[r] ?? 0);
   const inbound = p.shipments.filter((s) => s.to === marketId).reduce((a, s) => a + s.qty, 0);
-  const free = Math.floor(home ? p.capacity - p.used : p.depotCapacity - Object.values(store).reduce((a, v) => a + (v ?? 0), 0) - inbound);
+  const free = Math.floor(home ? p.capacity - p.used : (p.depotCapacities[marketId as Exclude<MarketId, 'nearhaven'>] ?? p.depotCapacity) - Object.values(store).reduce((a, v) => a + (v ?? 0), 0) - inbound);
   const buy = useMemo(() => estimate(market, r, 'buy', qty), [market, r, qty]);
   const sell = useMemo(() => estimate(market, r, 'sell', qty), [market, r, qty]);
   const basis = p.costBasis[r];
