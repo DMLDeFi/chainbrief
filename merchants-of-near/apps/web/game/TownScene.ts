@@ -1,6 +1,7 @@
 import * as Phaser from 'phaser';
-import { type FeedEntry, type PublicSnapshot } from '@mon/engine';
-import { BUILDINGS, CITY_BRIDGE, CITY_ID, CITY_PROPS, DECOR, MAP, PLOTS, TILE_H, TILE_W, hash2, iso, tileKind, type BuildingDef } from './layout';
+import { CITY_DEFS, type FeedEntry, type PublicSnapshot } from '@mon/engine';
+import { BUILDINGS, CITY_BRIDGE, CITY_ID, CITY_PROPS, DECOR, MAP, PLOTS, TILE_H, TILE_W, hash2, iso, tileKind, type BuildingDef, type TileKind } from './layout';
+import { ALL_DISTRICTS, districtCount, distToDeveloped, growthExtent, growthTile, type District } from './growth';
 import { makeTileTextures, makeTreeTextures } from './textures';
 import { SPECS, drawBuilding, houseSpec, type BuildingArt } from './art/buildings';
 import { LOOKS, buildCharacter, citizenLook } from './art/characters';
@@ -55,7 +56,7 @@ const WORK_SPOT: Record<string, [number, number]> = {
   farmer: [21.2, 3.2], baker: [13.3, 12.6], baker2: [19.4, 18.3], blacksmith: [18.3, 10.6], trader: [24.4, 14.6], banker: [12.4, 19.6],
   miner: [7.4, 5.8], fisher: [3.6, 22.6], weaver: [12.6, 24.4], woodcutter: [25.4, 22.4],
 };
-const ZOOM_MIN = 0.45, ZOOM_MAX = 2.4;
+const ZOOM_MIN = 0.3, ZOOM_MAX = 2.4;
 
 export class TownScene extends Phaser.Scene {
   private cb!: TownCallbacks;
@@ -66,6 +67,12 @@ export class TownScene extends Phaser.Scene {
   private groundOrigin = { x: 0, y: 0 };
   private water: Phaser.GameObjects.Image[] = [];
   private trees: Array<{ img: Phaser.GameObjects.Image; seed: number; oak: boolean }> = [];
+  /** Districts the town has grown into beyond its original map (see growth.ts). */
+  private openDistricts: District[] = [];
+  private decoObjs: Phaser.GameObjects.GameObject[] = [];
+  private growthObjs: Phaser.GameObjects.GameObject[] = [];
+  /** Small town-house art reused for district homes, so growth draws no new textures. */
+  private houseArts: BuildingArt[] = [];
   private glows: Array<{ img: Phaser.GameObjects.Image; seed: number; base: number }> = [];
   private smoke: Phaser.GameObjects.Particles.ParticleEmitter[] = [];
   private buildings = new Map<string, PlacedBuilding>();
@@ -149,9 +156,11 @@ export class TownScene extends Phaser.Scene {
     makeTreeTextures(this);
     makePropTextures(this);
     this.makeSnowTile();
+    if (this.snap) this.openDistricts = this.growthFor(this.snap);
     this.buildGround();
     this.buildBuildings();
     this.buildDecorations();
+    this.buildDistricts();
     this.buildMarketSquare();
     this.buildProps();
     this.buildNpcs();
@@ -183,28 +192,32 @@ export class TownScene extends Phaser.Scene {
     g.destroy();
   }
 
+  /** Ground tile kind anywhere: the town map, its growth districts, or the countryside around them. */
+  private kindAt(gx: number, gy: number): TileKind {
+    if (gx >= 0 && gy >= 0 && gx < MAP && gy < MAP) return tileKind(gx, gy);
+    return growthTile(this.openDistricts, gx, gy) ?? (gx < 3 ? 'water' : 'grass');
+  }
+
   /** Static ground is baked into one render texture (one draw call instead of ~1,400). */
   private buildGround() {
-    const R = 5;
-    const left = iso(-R, MAP + R).x - TILE_W / 2, right = iso(MAP + R, -R).x + TILE_W / 2;
-    const top = iso(-R, -R).y, bottom = iso(MAP + R, MAP + R).y + TILE_H;
+    const ex = growthExtent(this.openDistricts);
+    const left = iso(ex.x0, ex.y1 + 1).x - TILE_W / 2, right = iso(ex.x1 + 1, ex.y0).x + TILE_W / 2;
+    const top = iso(ex.x0, ex.y0).y, bottom = iso(ex.x1 + 1, ex.y1 + 1).y + TILE_H;
     this.groundOrigin = { x: left, y: top };
     this.ground = this.add.renderTexture(left, top, right - left, bottom - top).setOrigin(0, 0).setDepth(-10000);
-    for (let gx = -R; gx < MAP + R; gx++) {
-      for (let gy = -R; gy < MAP + R; gy++) {
-        const inMap = gx >= 0 && gy >= 0 && gx < MAP && gy < MAP;
-        const kind = inMap ? tileKind(gx, gy) : gx < 3 ? 'water' : 'grass';
-        if (kind === 'water') {
+    for (let gx = ex.x0; gx <= ex.x1; gx++) {
+      for (let gy = ex.y0; gy <= ex.y1; gy++) {
+        if (this.kindAt(gx, gy) === 'water') {
           const { x, y } = iso(gx, gy);
           this.water.push(this.add.image(x, y, 'water2-0').setOrigin(0.5, 0).setDepth(-9999));
         }
       }
     }
-    this.paintGround('spring');
+    this.paintGround(this.season || 'spring');
   }
 
   private paintGround(season: string) {
-    const R = 5;
+    const ex = growthExtent(this.openDistricts);
     this.ground.clear();
     const stamp = (key: string, gx: number, gy: number, tint = 0xffffff, alpha = 1) => {
       const { x, y } = iso(gx, gy);
@@ -212,14 +225,15 @@ export class TownScene extends Phaser.Scene {
       this.ground.draw(img, x - this.groundOrigin.x, y - this.groundOrigin.y);
       img.destroy();
     };
-    for (let gx = -R; gx < MAP + R; gx++) {
-      for (let gy = -R; gy < MAP + R; gy++) {
-        const inMap = gx >= 0 && gy >= 0 && gx < MAP && gy < MAP;
-        const kind = inMap ? tileKind(gx, gy) : gx < 3 ? 'water' : 'grass';
+    for (let gx = ex.x0; gx <= ex.x1; gx++) {
+      for (let gy = ex.y0; gy <= ex.y1; gy++) {
+        const kind = this.kindAt(gx, gy);
         if (kind === 'water') continue;
         const h = hash2(gx, gy);
-        // Atmospheric perspective: the land outside town fades into haze.
-        const edge = inMap ? 0 : Math.min(1, Math.max(-gx, -gy, gx - MAP + 1, gy - MAP + 1) / R);
+        // Atmospheric perspective: the land outside town (and its districts) fades into haze.
+        const dist = distToDeveloped(this.openDistricts, gx, gy);
+        const inMap = dist === 0;
+        const edge = Math.min(1, dist / 5);
         const haze = Phaser.Display.Color.Interpolate.ColorWithColor(Phaser.Display.Color.ValueToColor(0xffffff), Phaser.Display.Color.ValueToColor(0x9fb0b8), 100, Math.round(edge * 70));
         const hazeTint = Phaser.Display.Color.GetColor(haze.r, haze.g, haze.b);
         if (kind === 'grass') {
@@ -240,6 +254,7 @@ export class TownScene extends Phaser.Scene {
     };
     for (const b of BUILDINGS) ao(b.gx, b.gy, b.w, b.d);
     for (const d of DECOR) ao(d.gx, d.gy, d.w, d.d);
+    for (const d of this.openDistricts) for (const h of d.houses) ao(h.gx, h.gy, 1, 1);
   }
 
   private occupied(gx: number, gy: number) {
@@ -250,34 +265,68 @@ export class TownScene extends Phaser.Scene {
     return false;
   }
 
+  /**
+   * The canvas renderer ignores tints, so there each season's canopy colour is
+   * baked into its own texture. With WebGL one white canopy is tinted.
+   */
+  private canopyKey(season: string): string {
+    if (this.game.renderer.type !== Phaser.CANVAS) return 'oak-canopy';
+    const key = `oak-canopy-${season}`;
+    if (this.textures.exists(key)) return key;
+    const src = this.textures.get('oak-canopy').getSourceImage() as HTMLCanvasElement;
+    const ct = this.textures.createCanvas(key, src.width, src.height);
+    if (!ct) return 'oak-canopy';
+    const ctx = ct.context;
+    ctx.drawImage(src, 0, 0);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = `#${(SEASON_OAK[season] ?? SEASON_OAK.spring).toString(16).padStart(6, '0')}`;
+    ctx.fillRect(0, 0, src.width, src.height);
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.drawImage(src, 0, 0);
+    ct.refresh();
+    return key;
+  }
+
+  /** Is a district tile taken by a street, a plot, a home or a lamp? */
+  private districtOccupied(d: District, gx: number, gy: number) {
+    if (d.roads.has(`${gx},${gy}`)) return true;
+    for (const p of d.plots) if (gx >= p.gx - 1 && gx <= p.gx + 2 && gy >= p.gy - 1 && gy <= p.gy + 2) return true;
+    for (const h of d.houses) if (Math.abs(gx - h.gx) <= 1 && Math.abs(gy - h.gy) <= 1) return true;
+    return false;
+  }
+
   private buildDecorations() {
-    for (let gx = -4; gx < MAP + 4; gx++) {
-      for (let gy = -4; gy < MAP + 4; gy++) {
+    const ex = growthExtent(this.openDistricts);
+    const track = <T extends Phaser.GameObjects.GameObject>(o: T) => { this.decoObjs.push(o); return o; };
+    for (let gx = ex.x0 + 1; gx < ex.x1; gx++) {
+      for (let gy = ex.y0 + 1; gy < ex.y1; gy++) {
         const inMap = gx >= 0 && gy >= 0 && gx < MAP && gy < MAP;
         if (inMap && this.occupied(gx, gy)) continue;
         if (!inMap && gx < 3) continue;
+        const district = inMap ? undefined : this.openDistricts.find((d) => gx >= d.x0 && gx <= d.x1 && gy >= d.y0 && gy <= d.y1);
+        if (district && this.districtOccupied(district, gx, gy)) continue;
         const h = hash2(gx * 7 + 3, gy * 13 + 1);
-        const forest = (gx > 21 && gy > 19) || gx > 27 || gy > 27 || gy < 1 || !inMap;
-        const chance = forest ? 0.55 : 0.07;
+        const forest = district ? false : (gx > 21 && gy > 19) || gx > 27 || gy > 27 || gy < 1 || !inMap;
+        const chance = district ? 0.05 : forest ? 0.55 : 0.07;
         if (h > chance) {
-          if (h > 0.96 && inMap) this.addProp(gx + 0.5, gy + 0.5, h > 0.985 ? 'rock' : 'bush');
+          if (h > 0.96 && (inMap || district)) track(this.addProp(gx + 0.5, gy + 0.5, h > 0.985 ? 'rock' : 'bush'));
           continue;
         }
         const { x, y } = iso(gx + 0.5, gy + 0.5);
         const jitterX = (hash2(gx, gy * 3) - 0.5) * 18;
         const scale = 0.85 + hash2(gy * 5, gx) * 0.35;
-        const haze = inMap ? 0xffffff : 0xc4ced2;
+        const haze = inMap || district ? 0xffffff : 0xc4ced2;
         if (hash2(gy, gx) > 0.5) {
-          const t = this.add.image(x + jitterX, y + 4, 'pine').setOrigin(0.5, 0.94).setDepth(y + 4).setScale(scale).setTint(haze);
+          const t = track(this.add.image(x + jitterX, y + 4, 'pine').setOrigin(0.5, 0.94).setDepth(y + 4).setScale(scale).setTint(haze));
           this.trees.push({ img: t, seed: h * 40, oak: false });
         } else {
-          this.add.image(x + jitterX, y + 4, 'oak-trunk').setOrigin(0.5, 0.94).setDepth(y + 4).setScale(scale).setTint(haze);
-          const c = this.add.image(x + jitterX, y + 4, 'oak-canopy').setOrigin(0.5, 0.94).setDepth(y + 4.1).setScale(scale).setTint(SEASON_OAK.spring);
+          track(this.add.image(x + jitterX, y + 4, 'oak-trunk').setOrigin(0.5, 0.94).setDepth(y + 4).setScale(scale).setTint(haze));
+          const c = track(this.add.image(x + jitterX, y + 4, this.canopyKey(this.season || 'spring')).setOrigin(0.5, 0.94).setDepth(y + 4.1).setScale(scale).setTint(SEASON_OAK[this.season] ?? SEASON_OAK.spring));
           this.trees.push({ img: c, seed: h * 40, oak: true });
         }
       }
     }
-    for (const [gx, gy] of [[4, 2], [7, 2], [8, 4], [4, 6], [6, 7]]) this.addProp(gx + 0.5, gy + 0.5, 'rock');
+    for (const [gx, gy] of [[4, 2], [7, 2], [8, 4], [4, 6], [6, 7]]) track(this.addProp(gx + 0.5, gy + 0.5, 'rock'));
   }
 
   private addProp(gx: number, gy: number, key: string, opts: { flip?: boolean; scale?: number; originY?: number; tint?: number } = {}) {
@@ -344,6 +393,7 @@ export class TownScene extends Phaser.Scene {
     DECOR.forEach((d, i) => {
       const spec = CITY_ID !== 'nearhaven' && SPECS[d.id] ? SPECS[d.id] : d.id === 'tavern' ? SPECS.tavern : houseSpec(i);
       const art = drawBuilding(this, `d-${d.id}`, spec);
+      if (d.id !== 'tavern' && d.w === 1 && d.d === 1 && this.houseArts.length < 8) this.houseArts.push(art);
       const img = this.placeBuilding(d, art);
       this.addLights(art, img);
       img.setInteractive({ pixelPerfect: true, alphaTolerance: 40 });
@@ -518,16 +568,20 @@ export class TownScene extends Phaser.Scene {
    * in town. Each has a home and a workplace and keeps a daily routine.
    */
   private syncCitizens(population: number, snap: PublicSnapshot) {
-    const homes: Grid[] = DECOR.filter((d) => d.id !== 'tavern').map((d) => ({ gx: d.gx + 0.5, gy: d.gy + 1.35 }));
+    const homes: Grid[] = [
+      ...DECOR.filter((d) => d.id !== 'tavern').map((d) => ({ gx: d.gx + 0.5, gy: d.gy + 1.35 })),
+      ...this.openDistricts.flatMap((d) => d.houses.map((h) => ({ gx: h.gx + 0.5, gy: h.gy + 1.35 }))),
+    ];
+    const slots = this.plotSlots();
     const jobs: Array<Grid & { plot?: number }> = BUILDINGS.map((b) => ({ gx: b.door.gx + 0.5, gy: b.door.gy + 0.6 }));
     // One visible worker per hand at player businesses in Nearhaven (a few per site at most).
     const plotJobs: Array<Grid & { plot: number }> = [];
     for (const b of snap.businesses) {
-      if ((b.city ?? 'nearhaven') !== CITY_ID || !PLOTS[b.plot]) continue;
+      if ((b.city ?? 'nearhaven') !== CITY_ID || !slots[b.plot]) continue;
       const workers = Math.min(3, b.workers ?? 1);
-      for (let k = 0; k < workers; k++) plotJobs.push({ gx: PLOTS[b.plot].gx + 0.6 + k * 0.45, gy: PLOTS[b.plot].gy + 2.25, plot: b.plot });
+      for (let k = 0; k < workers; k++) plotJobs.push({ gx: slots[b.plot].gx + 0.6 + k * 0.45, gy: slots[b.plot].gy + 2.25, plot: b.plot });
     }
-    const target = Math.max(10, Math.min(44, Math.round(population / 12))) + Math.min(18, plotJobs.length);
+    const target = Math.max(10, Math.min(44 + 5 * this.openDistricts.length, Math.round(population / 12))) + Math.min(18, plotJobs.length);
     const key = plotJobs.map((j) => j.plot).join(',');
     if (key !== this.citizenJobsKey) {
       // Workplaces changed: reassign the first citizens to the player businesses.
@@ -651,8 +705,7 @@ export class TownScene extends Phaser.Scene {
 
   private setupCamera() {
     const cam = this.cameras.main;
-    const minP = iso(0, MAP), maxP = iso(MAP, 0), bottom = iso(MAP, MAP);
-    cam.setBounds(minP.x - 300, -460, maxP.x - minP.x + 600, bottom.y + 760);
+    this.updateCameraBounds();
     const center = iso(15.5, 15.5);
     cam.centerOn(center.x, center.y);
     const z = this.scale.width < 700 ? 0.72 : 1.05;
@@ -709,7 +762,7 @@ export class TownScene extends Phaser.Scene {
       const b = BUILDINGS.find((x) => x.merchant === target.id);
       if (b) p = iso(b.gx + b.w / 2, b.gy + b.d / 2);
     } else if (target.type === 'plot') {
-      const pl = PLOTS[target.plot];
+      const pl = this.plotSlots()[target.plot];
       if (pl) p = iso(pl.gx + 1, pl.gy + 1);
     }
     this.dragVel = { x: 0, y: 0 };
@@ -726,11 +779,13 @@ export class TownScene extends Phaser.Scene {
   }
 
   private applySnapshot(snap: PublicSnapshot) {
+    this.applyGrowth(snap);
     const season = this.director.season ?? snap.season;
     if (season !== this.season) {
       this.season = season;
       this.paintGround(season);
-      for (const t of this.trees) if (t.oak) t.img.setTint(SEASON_OAK[season]);
+      const canopy = this.canopyKey(season);
+      for (const t of this.trees) if (t.oak) t.img.setTexture(canopy).setTint(SEASON_OAK[season]);
       for (const t of this.trees) if (!t.oak) t.img.setTint(season === 'winter' ? 0xdfe8ee : 0xffffff);
     }
     this.syncCitizens(snap.cities?.[CITY_ID]?.population ?? snap.population, snap);
@@ -820,6 +875,116 @@ export class TownScene extends Phaser.Scene {
     }
   }
 
+  // -------------------------------------------------------------- growth ---
+  /** Plot positions: the town's own, then the plots of each open district (outskirts land). */
+  private plotSlots(): Array<{ gx: number; gy: number }> {
+    return [...PLOTS, ...this.openDistricts.flatMap((d) => d.plots)];
+  }
+
+  /** Plots in this city that hold a business or a player's land. */
+  private usedPlots(snap: PublicSnapshot): number[] {
+    return [
+      ...snap.businesses.filter((b) => (b.city ?? 'nearhaven') === CITY_ID).map((b) => b.plot),
+      ...(snap.land ?? []).filter((l) => l.city === CITY_ID).map((l) => l.plot),
+    ];
+  }
+
+  /** The plot the city will sell next once the town is full (the engine's freePlot). */
+  private nextOutskirts(used: number[], plots: number): number {
+    const set = new Set(used);
+    let i = plots;
+    while (set.has(i)) i++;
+    return i;
+  }
+
+  private growthFor(snap: PublicSnapshot): District[] {
+    const land = snap.cityLand?.[CITY_ID];
+    const plots = land?.plots ?? PLOTS.length;
+    const used = this.usedPlots(snap);
+    let highest = used.length ? Math.max(...used) : -1;
+    if ((land?.taken ?? 0) >= plots) highest = Math.max(highest, this.nextOutskirts(used, plots));
+    const n = districtCount({
+      population: snap.cities?.[CITY_ID]?.population ?? snap.population,
+      founding: CITY_DEFS[CITY_ID].population,
+      highestPlot: highest,
+      drawnTownPlots: PLOTS.length,
+    });
+    return ALL_DISTRICTS.slice(0, n);
+  }
+
+  /** Grow (or shrink) the drawn town to match the city. */
+  private applyGrowth(snap: PublicSnapshot) {
+    const open = this.growthFor(snap);
+    if (open.length === this.openDistricts.length) return;
+    const grew = open.length > this.openDistricts.length && !this.firstSnap;
+    const before = this.openDistricts.length;
+    this.openDistricts = open;
+    this.rebuildTown();
+    if (grew) for (const d of open.slice(before)) this.announceDistrict(d);
+  }
+
+  private rebuildTown() {
+    this.ground?.destroy();
+    this.water.forEach((w) => w.destroy());
+    this.water = [];
+    const dead = new Set<Phaser.GameObjects.GameObject>([...this.decoObjs, ...this.growthObjs]);
+    this.trees = this.trees.filter((t) => !dead.has(t.img));
+    this.glows = this.glows.filter((g) => !dead.has(g.img));
+    this.smoke = this.smoke.filter((e) => !dead.has(e));
+    dead.forEach((o) => o.destroy());
+    this.decoObjs = [];
+    this.growthObjs = [];
+    this.buildGround();
+    this.buildDecorations();
+    this.buildDistricts();
+    if (this.season === 'winter') for (const t of this.trees) if (!t.oak) t.img.setTint(0xdfe8ee);
+    this.updateCameraBounds();
+    this.plotKey = '';
+  }
+
+  /** Homes and street lamps of each open district. */
+  private buildDistricts() {
+    let n = 0;
+    for (const d of this.openDistricts) {
+      for (const h of d.houses) {
+        const art = this.houseArts[(n++ * 3 + d.depth) % Math.max(1, this.houseArts.length)];
+        if (!art) continue;
+        const img = this.placeBuilding({ gx: h.gx, gy: h.gy, w: 1, d: 1 }, art);
+        img.setInteractive({ pixelPerfect: true, alphaTolerance: 40 });
+        img.on('pointerover', () => this.hoverLabel.setText(`Town house · ${d.name}`).setVisible(true));
+        img.on('pointerout', () => this.hoverLabel.setVisible(false));
+        const extras: Phaser.GameObjects.GameObject[] = [];
+        this.addLights(art, img, extras);
+        this.growthObjs.push(img, ...extras);
+      }
+      for (const l of d.lamps) {
+        const { x, y } = iso(l.gx, l.gy);
+        const lamp = this.add.image(x, y, 'lamp2').setOrigin(0.5, 0.97).setDepth(y);
+        const g = this.add.image(x, y - 34, 'glow').setBlendMode(Phaser.BlendModes.ADD).setDepth(90002).setAlpha(0).setScale(0.8).setTint(0xffc070);
+        this.glows.push({ img: g, seed: Math.random() * 10, base: 1 });
+        this.growthObjs.push(lamp, g);
+      }
+      // A signpost names the district where its cross street meets the main road.
+      const c = iso(d.center.gx, d.center.gy);
+      const label = this.add.text(c.x, c.y - 30, d.name, { fontFamily: 'Cinzel, serif', fontSize: '11px', color: '#f6e7c1', backgroundColor: 'rgba(26,18,11,0.72)', padding: { x: 6, y: 2 } }).setOrigin(0.5, 1).setDepth(c.y + 40).setAlpha(0.9);
+      this.growthObjs.push(label);
+    }
+  }
+
+  /** A short celebration when the town grows a new district. */
+  private announceDistrict(d: District) {
+    const c = iso(d.center.gx, d.center.gy);
+    const t = this.add.text(c.x, c.y - 60, `${CITY_DEFS[CITY_ID].name} grows: ${d.name} founded`, { fontFamily: 'Cinzel, serif', fontSize: '15px', color: '#ffe29a', backgroundColor: 'rgba(26,18,11,0.9)', padding: { x: 10, y: 5 } }).setOrigin(0.5, 1).setDepth(100001);
+    this.tweens.add({ targets: t, y: c.y - 110, alpha: { from: 1, to: 0 }, delay: 2500, duration: 2500, onComplete: () => t.destroy() });
+  }
+
+  private updateCameraBounds() {
+    const ex = growthExtent(this.openDistricts);
+    const x0 = ex.x0 + 5, y0 = ex.y0 + 5, x1 = ex.x1 - 5, y1 = ex.y1 - 5;
+    const minX = iso(x0, y1 + 1).x, maxX = iso(x1 + 1, y0).x, top = iso(x0, y0).y, bottom = iso(x1 + 1, y1 + 1).y;
+    this.cameras.main.setBounds(minX - 300, top - 460, maxX - minX + 600, bottom - top + 760);
+  }
+
   private syncPlots(snap: PublicSnapshot) {
     const me = this.cb.getPlayerId();
     // The isometric town is Nearhaven: businesses and land elsewhere appear on the world map.
@@ -833,8 +998,16 @@ export class TownScene extends Phaser.Scene {
     this.plotLayer.forEach((o) => o.destroy());
     this.plotLayer = [];
     // Only the city's real plots (its land, plus housing districts) are shown.
-    const nPlots = Math.min(PLOTS.length, snap.cityLand?.[CITY_ID]?.plots ?? PLOTS.length);
-    PLOTS.slice(0, nPlots).forEach((pl, i) => {
+    // Outskirts plots (beyond the city's own) appear once someone holds them, plus the next one for sale.
+    const slots = this.plotSlots();
+    const townPlots = snap.cityLand?.[CITY_ID]?.plots ?? PLOTS.length;
+    const nPlots = Math.min(PLOTS.length, townPlots);
+    const used = this.usedPlots(snap);
+    const show = new Set<number>([...Array(nPlots).keys(), ...used]);
+    if ((snap.cityLand?.[CITY_ID]?.taken ?? 0) >= townPlots) show.add(this.nextOutskirts(used, townPlots));
+    [...show].sort((a, b) => a - b).forEach((i) => {
+      const pl = slots[i];
+      if (!pl) return;
       const biz = here.find((b) => b.plot === i);
       if (!biz) {
         const owned = land.find((l) => l.plot === i);
@@ -849,7 +1022,7 @@ export class TownScene extends Phaser.Scene {
         g.strokePoints([n, e, s, w], true);
         const sign = this.add.image(p.x, p.y + 4, 'signpost').setOrigin(0.5, 1).setDepth(p.y + 4);
         if (owned) sign.setTint(mine ? 0xb8ffe0 : 0xffc8b0);
-        const label = owned ? (mine ? 'Your land — open a business here' : `Sold — ${owned.owner}'s land`) : 'Empty plot — open a business here';
+        const label = owned ? (mine ? 'Your land — open a business here' : `Sold — ${owned.owner}'s land`) : i >= townPlots ? 'Outskirts plot for sale — open a business here' : 'Empty plot — open a business here';
         this.makeInteractive(sign, label, () => this.cb.onSelect({ type: 'plot', plot: i, city: CITY_ID, ownerId: owned?.ownerId }));
         this.plotLayer.push(g, sign);
         if (mine) { const f = iso(pl.gx + 0.2, pl.gy + 2); this.plotLayer.push(this.add.image(f.x, f.y, 'flag').setOrigin(0.1, 1).setDepth(p.y + 5)); }

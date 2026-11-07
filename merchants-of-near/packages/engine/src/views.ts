@@ -6,7 +6,7 @@ import { dayOf, hourOf, invTotal, money } from './internal';
 import { merchantNetWorth, playerNetWorth, shareValue, debtOf } from './valuation';
 import { BUSINESS_DEFS, businessCapacity, businessMaxWorkers, businessQuote, businessSaleValue, MAX_BUSINESS_LEVEL, overheadFactor, playerCapacity, UPGRADE_LEVEL_REQ, upgradeCostOf } from './businesses';
 import { cityPopulation, growthFactors, INFRA, INFRA_KINDS, infraCost, laborEmployed, laborSupply, MAX_INFRA, patronTitle, populationCap, wageFactor, type GrowthFactors, type InfraKind } from './civic';
-import { affinity, isOutskirts, plotCount, LAND_TAX, landDef, landPrice, landValue, plotsTaken, prosperity } from './property';
+import { affinity, plotCount, LAND_TAX, landDef, landPrice, landValue, plotsTaken, prosperity } from './property';
 import { LEVELS, levelTitle, nextLevelRequirements, ACHIEVEMENTS, rankTitle, powerhouseTier, citiesWithBusiness } from './progression';
 import { companyReport, maxSubsidiaries } from './corporate';
 import { warehouseExpansionCost } from './players';
@@ -22,6 +22,9 @@ export interface CitySnapshot {
   labor: { employed: number; supply: number; wageFactor: number };
   works: Array<{ kind: InfraKind; name: string; level: number; max: number; effect: string; next: string | null; funded: number; cost: number; patrons: Array<{ name: string; amount: number }> }>;
 }
+
+/** Outskirts plots per city the town view can draw (its growth districts). */
+export const OUTSKIRTS_DRAWN = 48;
 
 export function publicSnapshot(world: WorldState, feedSince = 0) {
   const markets = Object.fromEntries(
@@ -84,9 +87,9 @@ export function publicSnapshot(world: WorldState, feedSince = 0) {
       lastDecision: m.decisions[m.decisions.length - 1] ?? null,
       lastTradeTick: m.memory.length ? m.memory[m.memory.length - 1].tick : -1,
     })),
-    // Only businesses on town plots are drawn, so only those travel in the shared snapshot:
-    // its size stays bounded however many players (and outskirts businesses) there are.
-    businesses: Object.values(world.businesses).filter((b) => !isOutskirts(world, b.city ?? 'nearhaven', b.plot)).map((b) => ({ id: b.id, name: b.name, kind: b.kind, city: b.city ?? 'nearhaven', plot: b.plot, level: b.level, workers: b.workers, owner: world.players[b.ownerId]?.name ?? '?', ownerId: b.ownerId })),
+    // Only businesses the town view can draw (in town, or in its first outskirts districts) travel
+    // in the shared snapshot: its size stays bounded however many players and businesses there are.
+    businesses: Object.values(world.businesses).filter((b) => b.plot < plotCount(world, b.city ?? 'nearhaven') + OUTSKIRTS_DRAWN).map((b) => ({ id: b.id, name: b.name, kind: b.kind, city: b.city ?? 'nearhaven', plot: b.plot, level: b.level, workers: b.workers, owner: world.players[b.ownerId]?.name ?? '?', ownerId: b.ownerId })),
     /** Vacant plots players hold as property (drawn as fenced, sold plots in town). */
     land: Object.values(world.players).flatMap((p) => (p.land ?? []).map((l) => ({ city: l.city, plot: l.plot, owner: p.name, ownerId: p.id }))),
     /** Land market in each city. */
