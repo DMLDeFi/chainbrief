@@ -1,4 +1,5 @@
 import { MARKETS, type MarketId } from './config';
+import { ownedBy } from './bizIndex';
 import type { BusinessKind, PlayerState, Result, WorldState } from './types';
 import { fail, money, ok, pushFeed } from './internal';
 import { CITY_DEFS, type CityArchetype } from './cities';
@@ -44,6 +45,18 @@ export const affinity = (city: MarketId, kind: BusinessKind) => AFFINITY[CITY_DE
 /** Daily land tax as a share of the plot's current value. */
 export const LAND_TAX = 0.01;
 
+/**
+ * Land gets dearer as a city fills: 12% per plot inside the town, then 3% per
+ * plot on the outskirts. There is no hard limit on outskirts land, so growth is
+ * never capped, only made more expensive.
+ */
+function scarcityFactor(world: WorldState, city: MarketId, taken: number): number {
+  const inTown = plotCount(world, city);
+  return 1 + 0.12 * Math.min(taken, inTown) + 0.03 * Math.max(0, taken - inTown);
+}
+/** Is this plot index in town (drawn on the town map) or on the outskirts? */
+export const isOutskirts = (world: WorldState, city: MarketId, plot: number) => plot >= plotCount(world, city);
+
 /** Plots in a city: its original land plus districts opened by housing projects. */
 export const plotCount = (world: WorldState, city: MarketId) => landDef(city).plots + extraPlots(world, city);
 
@@ -63,20 +76,20 @@ export function prosperity(world: WorldState, city: MarketId): number {
 /** Price of the next plot in a city: scarcity times prosperity. */
 export function landPrice(world: WorldState, city: MarketId): number {
   const d = landDef(city);
-  const scarcity = 1 + 0.12 * plotsTaken(world, city);
+  const scarcity = scarcityFactor(world, city, plotsTaken(world, city));
   return money(d.basePrice * scarcity * prosperity(world, city));
 }
 /** What an already-owned plot is worth today (the city's current price, without the extra scarcity a new sale would add). */
 export function landValue(world: WorldState, city: MarketId): number {
   const d = landDef(city);
-  const scarcity = 1 + 0.12 * Math.max(0, plotsTaken(world, city) - 1);
+  const scarcity = scarcityFactor(world, city, Math.max(0, plotsTaken(world, city) - 1));
   return money(d.basePrice * scarcity * prosperity(world, city));
 }
 
 /** Plots a player holds in a city (vacant land plus plots under their businesses). */
 export function plotsOwned(world: WorldState, p: PlayerState, city?: MarketId): number {
   let n = p.land.filter((l) => !city || l.city === city).length;
-  for (const b of Object.values(world.businesses)) if (b.ownerId === p.id && (!city || b.city === city)) n += 1;
+  for (const b of ownedBy(world, p.id)) if (!city || b.city === city) n += 1;
   return n;
 }
 
@@ -87,7 +100,13 @@ export function starterGrant(world: WorldState, p: PlayerState, city: MarketId):
 
 export function freePlot(world: WorldState, city: MarketId): number | undefined {
   const used = world.landUse[city] ?? [];
-  return [...Array(plotCount(world, city)).keys()].find((i) => !used.includes(i));
+  const inTown = [...Array(plotCount(world, city)).keys()].find((i) => !used.includes(i));
+  if (inTown !== undefined) return inTown;
+  // The town is full: the next plot is on the outskirts.
+  let i = plotCount(world, city);
+  const set = new Set(used);
+  while (set.has(i)) i++;
+  return i;
 }
 
 export function takePlot(world: WorldState, city: MarketId, plot: number) {
@@ -144,7 +163,7 @@ export function sellLand(world: WorldState, playerId: string, city: unknown): Re
 export function landTaxDaily(world: WorldState, p: PlayerState): void {
   const due: Partial<Record<MarketId, number>> = {};
   for (const l of p.land) due[l.city] = (due[l.city] ?? 0) + landValue(world, l.city) * LAND_TAX;
-  for (const b of Object.values(world.businesses)) if (b.ownerId === p.id && !starterPlot(world, p, b.id)) due[b.city] = (due[b.city] ?? 0) + landValue(world, b.city) * LAND_TAX;
+  for (const b of ownedBy(world, p.id)) if (!starterPlot(world, p, b.id)) due[b.city] = (due[b.city] ?? 0) + landValue(world, b.city) * LAND_TAX;
   let total = 0;
   for (const [city, amt] of Object.entries(due) as Array<[MarketId, number]>) {
     const pay = money(Math.min(amt, Math.max(0, p.gold)));

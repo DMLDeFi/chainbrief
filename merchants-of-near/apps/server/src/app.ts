@@ -17,6 +17,7 @@ import {
   CITY_DEFS,
   ROUTES,
   evaluateDeal,
+  acquisitionTargets,
 } from '@mon/engine';
 import type { ServerConfig } from './config';
 import type { Store, UserRecord } from './store/types';
@@ -185,6 +186,12 @@ export async function buildApp(deps: AppDeps) {
     const view = playerView(game.world, user.id);
     if (!view) return reply.code(404).send({ error: 'No merchant profile' });
     return { user: { id: user.id, username: user.username, nearAccountId: user.nearAccountId }, player: view };
+  });
+
+  app.get('/api/acquisitions', async (req, reply) => {
+    const user = requireUser(req, reply);
+    if (!user) return;
+    return acquisitionTargets(game.world, user.id);
   });
 
   app.get('/api/ledger', async (req, reply) => {

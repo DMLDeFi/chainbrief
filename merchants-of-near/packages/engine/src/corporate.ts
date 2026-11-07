@@ -1,4 +1,5 @@
 import { MARKETS, type MarketId } from './config';
+import { invalidateBizIndex, ownedBy } from './bizIndex';
 import type { AcquisitionOffer, Business, PlayerState, Result, Subsidiary, WorldState } from './types';
 import { clamp, fail, money, newId, ok, pushFeed } from './internal';
 import { CITY_DEFS } from './cities';
@@ -61,7 +62,7 @@ export function dissolveSubsidiary(world: WorldState, playerId: string, companyI
   const i = p?.companies?.findIndex((c) => c.id === companyId) ?? -1;
   if (!p || i < 0) return fail('Company not found');
   p.companies!.splice(i, 1);
-  for (const b of Object.values(world.businesses)) if (b.ownerId === playerId && b.companyId === companyId) b.companyId = undefined;
+  for (const b of ownedBy(world, playerId)) if (b.companyId === companyId) b.companyId = undefined;
   return ok({ id: String(companyId) });
 }
 
@@ -141,6 +142,7 @@ export function respondToOffer(world: WorldState, playerId: string, offerId: unk
   if (b.capital) { seller.gold = money(seller.gold + b.capital); b.capital = 0; }
   seller.gold = money(seller.gold + o.price);
   b.ownerId = buyer.id;
+  invalidateBizIndex(world);
   b.companyId = undefined;
   b.starterGrant = undefined;
   b.name = b.name.replace(seller.name, buyer.name);
@@ -251,7 +253,7 @@ const round = (t: Totals) => Object.fromEntries(Object.entries(t).map(([k, v]) =
 /** The whole empire at a glance: balance sheet, results, and breakdowns by city and by company. */
 export function companyReport(world: WorldState, playerId: string) {
   const p = world.players[playerId];
-  const mine = Object.values(world.businesses).filter((b) => b.ownerId === playerId);
+  const mine = ownedBy(world, playerId);
   const all = zero();
   const byCity = Object.fromEntries(MARKETS.map((c) => [c, zero()])) as Record<MarketId, Totals>;
   const byCompany: Record<string, Totals> = { parent: zero() };

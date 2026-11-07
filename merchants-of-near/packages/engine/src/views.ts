@@ -6,7 +6,7 @@ import { dayOf, hourOf, invTotal, money } from './internal';
 import { merchantNetWorth, playerNetWorth, shareValue, debtOf } from './valuation';
 import { BUSINESS_DEFS, businessCapacity, businessMaxWorkers, businessQuote, businessSaleValue, MAX_BUSINESS_LEVEL, overheadFactor, playerCapacity, UPGRADE_LEVEL_REQ, upgradeCostOf } from './businesses';
 import { cityPopulation, growthFactors, INFRA, INFRA_KINDS, infraCost, laborEmployed, laborSupply, MAX_INFRA, patronTitle, populationCap, wageFactor, type GrowthFactors, type InfraKind } from './civic';
-import { affinity, plotCount, LAND_TAX, landDef, landPrice, landValue, plotsTaken, prosperity } from './property';
+import { affinity, isOutskirts, plotCount, LAND_TAX, landDef, landPrice, landValue, plotsTaken, prosperity } from './property';
 import { LEVELS, levelTitle, nextLevelRequirements, ACHIEVEMENTS, rankTitle, powerhouseTier, citiesWithBusiness } from './progression';
 import { companyReport, maxSubsidiaries } from './corporate';
 import { warehouseExpansionCost } from './players';
@@ -84,7 +84,9 @@ export function publicSnapshot(world: WorldState, feedSince = 0) {
       lastDecision: m.decisions[m.decisions.length - 1] ?? null,
       lastTradeTick: m.memory.length ? m.memory[m.memory.length - 1].tick : -1,
     })),
-    businesses: Object.values(world.businesses).map((b) => ({ id: b.id, name: b.name, deeded: !!b.deedTokenId, value: businessSaleValue(world, b).total, kind: b.kind, city: b.city ?? 'nearhaven', plot: b.plot, level: b.level, workers: b.workers, owner: world.players[b.ownerId]?.name ?? '?', ownerId: b.ownerId })),
+    // Only businesses on town plots are drawn, so only those travel in the shared snapshot:
+    // its size stays bounded however many players (and outskirts businesses) there are.
+    businesses: Object.values(world.businesses).filter((b) => !isOutskirts(world, b.city ?? 'nearhaven', b.plot)).map((b) => ({ id: b.id, name: b.name, kind: b.kind, city: b.city ?? 'nearhaven', plot: b.plot, level: b.level, workers: b.workers, owner: world.players[b.ownerId]?.name ?? '?', ownerId: b.ownerId })),
     /** Vacant plots players hold as property (drawn as fenced, sold plots in town). */
     land: Object.values(world.players).flatMap((p) => (p.land ?? []).map((l) => ({ city: l.city, plot: l.plot, owner: p.name, ownerId: p.id }))),
     /** Land market in each city. */
@@ -226,3 +228,12 @@ export function leaderboards(world: WorldState) {
 }
 
 export const catalog = { LEVELS, ACHIEVEMENTS: ACHIEVEMENTS.map(({ check: _c, ...a }) => a), BUSINESS_DEFS };
+
+/** Other owners' businesses a player could make an offer for (fetched on demand, not broadcast). */
+export function acquisitionTargets(world: WorldState, playerId: string, limit = 200) {
+  return Object.values(world.businesses)
+    .filter((b) => b.ownerId !== playerId && !b.deedTokenId && !b.chainOwner)
+    .map((b) => ({ id: b.id, name: b.name, kind: b.kind, city: b.city ?? 'nearhaven', level: b.level, owner: world.players[b.ownerId]?.name ?? '?', value: businessSaleValue(world, b).total }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, limit);
+}

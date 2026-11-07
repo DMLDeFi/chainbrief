@@ -43,7 +43,7 @@ function Emblem({ kind, size = 1 }: { kind: CityArchetype; size?: number }) {
   return <g transform={`scale(${size})`}>{shapes[kind]}</g>;
 }
 
-export function WorldMap({ world, me, onClose, onVisit, viewCity }: { world: PublicSnapshot; me: Me; onClose: () => void; onVisit: (c: MarketId) => void; viewCity: MarketId }) {
+export function WorldMap({ world, me, onClose, onVisit, onWalk, viewCity }: { world: PublicSnapshot; me: Me; onClose: () => void; onVisit: (c: MarketId) => void; onWalk?: (c: MarketId) => void; viewCity: MarketId }) {
   const [sel, setSel] = useState<MarketId>(viewCity);
   const p = me.player;
   const hasOffice = (c: MarketId) => c === 'nearhaven' || p.charters.includes(c) || p.marketAccess.includes(c);
@@ -211,7 +211,10 @@ export function WorldMap({ world, me, onClose, onVisit, viewCity }: { world: Pub
           ) : (
             <CharterCard city={sel} me={me} />
           )}
-          <button onClick={() => onVisit(sel)} className="btn btn-gold w-full py-2">{`Trade at the ${world.markets[sel].name}`}</button>
+          <div className="grid grid-cols-2 gap-2">
+            {onWalk && <button onClick={() => onWalk(sel)} className="btn btn-ghost w-full py-2 text-sm">{`Walk the streets`}</button>}
+            <button onClick={() => onVisit(sel)} className={`btn btn-gold w-full py-2 text-sm ${onWalk ? '' : 'col-span-2'}`}>Trade here</button>
+          </div>
           <CityCivic world={world} me={me} city={sel} />
         </div>
       </aside>

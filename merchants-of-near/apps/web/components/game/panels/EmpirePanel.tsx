@@ -1,8 +1,8 @@
 'use client';
 import { useState } from 'react';
-import { BUSINESS_DEFS, CITY_DEFS, LEVELS, MAX_LEVEL, type MarketId, type PublicSnapshot } from '@mon/engine';
+import { BUSINESS_DEFS, CITY_DEFS, LEVELS, MAX_LEVEL, type BusinessKind, type MarketId, type PublicSnapshot } from '@mon/engine';
 import type { Me } from '@/lib/api';
-import { useAction } from '@/lib/hooks';
+import { useAction, useFetch } from '@/lib/hooks';
 import { gold } from '@/lib/format';
 import { Badge, Drawer, Empty, LineChart, Stat, Tabs } from '../../ui';
 import { IconEmpire } from '../../icons';
@@ -157,7 +157,8 @@ function Acquisitions({ me, world }: { me: Me; world: PublicSnapshot }) {
   const p = me.player;
   const { run, busy } = useAction();
   const [bids, setBids] = useState<Record<string, number>>({});
-  const targets = world.businesses.filter((b) => b.ownerId !== me.user.id && !b.deeded);
+  const { data } = useFetch<Array<{ id: string; name: string; kind: BusinessKind; city: MarketId; level: number; owner: string; value: number }>>('/acquisitions', [world.day, p.offersMade.length]);
+  const targets = data ?? [];
   const canBuy = p.level >= 6;
   return (
     <div className="space-y-4 text-xs">

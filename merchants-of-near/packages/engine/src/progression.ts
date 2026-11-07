@@ -1,4 +1,5 @@
 import type { MetricKey, MissionDef, MissionProgress, PlayerState, WorldState } from './types';
+import { ownedBy } from './bizIndex';
 import { clamp, dayOf, money, pushFeed, weekOf } from './internal';
 import { playerNetWorth } from './valuation';
 
@@ -44,7 +45,7 @@ export const rankTitle = (p: PlayerState, netWorth: number) => {
   return t > 1 ? `${levelTitle(p.level)} ${ROMAN[Math.min(10, t)] ?? t}` : levelTitle(p.level);
 };
 /** Cities where the player runs at least one business. */
-export const citiesWithBusiness = (world: WorldState, p: PlayerState) => new Set(Object.values(world.businesses).filter((b) => b.ownerId === p.id).map((b) => b.city ?? 'nearhaven')).size;
+export const citiesWithBusiness = (world: WorldState, p: PlayerState) => new Set(ownedBy(world, p.id).map((b) => b.city ?? 'nearhaven')).size;
 
 export interface AchievementDef {
   id: string;
@@ -54,7 +55,7 @@ export interface AchievementDef {
   check: (world: WorldState, p: PlayerState) => boolean;
 }
 
-const owned = (world: WorldState, p: PlayerState) => Object.values(world.businesses).filter((b) => b.ownerId === p.id);
+const owned = (world: WorldState, p: PlayerState) => ownedBy(world, p.id);
 
 export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'first_trade', title: 'First Coin', description: 'Complete your first trade.', xp: 10, check: (_w, p) => (p.lifetime.trades ?? 0) >= 1 },

@@ -1,4 +1,5 @@
 import { RESOURCES, type MarketId } from './config';
+import { ownedBy } from './bizIndex';
 import type { Inventory, MerchantState, PlayerState, WorldState, ActorRef } from './types';
 import { money } from './internal';
 import { businessSaleValue } from './businesses';
@@ -33,8 +34,7 @@ export function shareValue(world: WorldState, m: MerchantState): number {
 
 export function businessValue(world: WorldState, playerId: string): number {
   let v = 0;
-  for (const b of Object.values(world.businesses)) {
-    if (b.ownerId !== playerId) continue;
+  for (const b of ownedBy(world, playerId)) {
     v += businessSaleValue(world, b).total + inventoryValue(world, b.inventory, b.city ?? 'nearhaven') + (b.capital ?? 0);
     if (b.caravan) v += inventoryValue(world, b.caravan.cargo);
   }

@@ -1,4 +1,5 @@
 import { MARKET_DEFS, MARKETS, RESOURCE_DEFS, type MarketId, type Resource } from './config';
+import { inCity } from './bizIndex';
 import type { BusinessKind, CityState, PlayerState, Result, WorldState } from './types';
 import { clamp, fail, money, ok, pushFeed } from './internal';
 import { CITY_DEFS, freightCost } from './cities';
@@ -48,7 +49,7 @@ const PARTICIPATION = 0.1;
 export const laborSupply = (world: WorldState, city: MarketId) => Math.max(8, Math.floor(cityPopulation(world, city) * PARTICIPATION));
 export function laborEmployed(world: WorldState, city: MarketId): number {
   let n = 0;
-  for (const b of Object.values(world.businesses)) if ((b.city ?? 'nearhaven') === city) n += b.workers;
+  for (const b of inCity(world, city)) n += b.workers;
   return n;
 }
 /** Wages rise once more than 70% of the workforce is employed, up to +60% when every hand is taken. */

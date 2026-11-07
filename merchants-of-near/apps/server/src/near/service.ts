@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { pushFeed, type WorldState } from '@mon/engine';
+import { invalidateBizIndex, pushFeed, type WorldState } from '@mon/engine';
 import type { ServerConfig } from '../config';
 import type { ChainTxRecord, Store } from '../store/types';
 import { CertificateAuthority, badgeMessage, certNonce, deedMessage } from './certificates';
@@ -189,6 +189,7 @@ export class NearService {
     }
     const from = current?.name ?? 'unknown';
     b.ownerId = newOwner.id;
+    invalidateBizIndex(world);
     b.name = `${newOwner.name}'s ${b.kind[0].toUpperCase()}${b.kind.slice(1)}`;
     b.deedTokenId = tokenId;
     b.chainOwner = deed.owner_id;

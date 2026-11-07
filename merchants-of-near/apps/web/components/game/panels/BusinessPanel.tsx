@@ -13,10 +13,10 @@ import { Coin, IconHouse, ResourceIcon } from '../../icons';
 
 type OwnedBiz = Me['player']['businesses'][number];
 
-export function BusinessPanel({ world, me, selection, onClose }: { world: PublicSnapshot; me: Me; selection: Selection | null; onClose: () => void }) {
+export function BusinessPanel({ world, me, selection, onClose, city: viewCity = 'nearhaven' }: { world: PublicSnapshot; me: Me; selection: Selection | null; onClose: () => void; city?: MarketId }) {
   const p = me.player;
   const sel = selection?.type === 'plot' ? selection : null;
-  const [focus, setFocus] = useState<string | null>(sel?.businessId ?? p.businesses[0]?.id ?? null);
+  const [focus, setFocus] = useState<string | null>(sel ? sel.businessId ?? null : p.businesses[0]?.id ?? null);
   const other = sel?.businessId && sel.ownerId !== me.user.id ? world.businesses.find((b) => b.id === sel.businessId) : null;
   const current = focus && focus !== 'property' ? p.businesses.find((b) => b.id === focus) : undefined;
   const byCity = MARKETS.map((c) => [c, p.businesses.filter((b) => b.city === c)] as const).filter(([, list]) => list.length > 0);
@@ -59,7 +59,7 @@ export function BusinessPanel({ world, me, selection, onClose }: { world: Public
           <button onClick={() => setFocus(null)} className={`w-full rounded-xl border border-dashed px-3 py-2.5 text-left text-sm ${focus === null ? 'border-brass text-brass' : 'border-line text-parchment-dim hover:border-brass-deep'}`}>+ Open a new business</button>
         </div>
         <div>
-          {current ? <Detail b={current} me={me} world={world} /> : focus === 'property' ? <Property me={me} world={world} /> : <Catalog me={me} world={world} onBought={(id) => setFocus(id)} />}
+          {current ? <Detail b={current} me={me} world={world} /> : focus === 'property' ? <Property me={me} world={world} /> : <Catalog me={me} world={world} initialCity={(sel?.city as MarketId | undefined) ?? viewCity} onBought={(id) => setFocus(id)} />}
         </div>
       </div>
     </Drawer>
@@ -81,10 +81,10 @@ function fitLabel(a: number) {
   return <Badge tone={a > 1 ? 'moss' : 'ember'}>{a > 1 ? `+${pct}% here` : `−${pct}% here`}</Badge>;
 }
 
-function Catalog({ me, world, onBought }: { me: Me; world: PublicSnapshot; onBought: (id: string) => void }) {
+function Catalog({ me, world, onBought, initialCity }: { me: Me; world: PublicSnapshot; onBought: (id: string) => void; initialCity: MarketId }) {
   const { run, busy } = useAction();
   const p = me.player;
-  const [city, setCity] = useState<MarketId>('nearhaven');
+  const [city, setCity] = useState<MarketId>(initialCity);
   const quotes = p.quotes[city];
   const land = world.cityLand[city];
   const free = land.plots - land.taken;

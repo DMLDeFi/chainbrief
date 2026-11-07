@@ -17,3 +17,4 @@ export * from './logistics';
 export * from './property';
 export * from './civic';
 export * from './corporate';
+export * from './bizIndex';

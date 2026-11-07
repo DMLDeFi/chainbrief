@@ -37,7 +37,12 @@ describe('land and property', () => {
     expect(landPrice(w, 'kingsreach')).toBeGreaterThan(first);
     expect(totalGold(w)).toBeCloseTo(before, 2);
     for (let i = 1; i < LAND.capital.plots; i++) expect(buyLand(w, p.id, 'kingsreach').ok).toBe(true);
-    expect(buyLand(w, p.id, 'kingsreach').ok).toBe(false); // the capital is full
+    // The town is full; land continues on the outskirts, dearer but on a gentler curve.
+    const lastInTown = landPrice(w, 'kingsreach');
+    const out = buyLand(w, p.id, 'kingsreach');
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.data.plot).toBeGreaterThanOrEqual(LAND.capital.plots);
+    expect(landPrice(w, 'kingsreach') / lastInTown).toBeLessThan(1.04);
     const sold = sellLand(w, p.id, 'kingsreach');
     expect(sold.ok).toBe(true);
     if (sold.ok) expect(sold.data.price).toBeLessThan(landPrice(w, 'kingsreach') + 1e-9);

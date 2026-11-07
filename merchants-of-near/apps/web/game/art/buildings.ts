@@ -75,6 +75,8 @@ export const SPECS: Record<string, BuildingSpec> = {
   'p-foundry': { w: 2, d: 2, h: 32, wall: 'stone', wallColor: 0x6e6862, plinth: 6, roof: 'gable', roofMat: 'slate', roofColor: 0x2f333a, roofH: 20, chimney: 'both', door: 'double', windows: 1, emblem: 'anvil', forge: true, seed: 39 },
   'p-carpenter': { w: 2, d: 2, h: 30, wall: 'timber', wallColor: 0xe9dcc2, plinth: 5, roof: 'gable', roofMat: 'clay', roofColor: 0x9a5a34, roofH: 24, door: 'arched', windows: 2, emblem: 'axe', awning: 0x6e8f5a, seed: 40 },
   'p-shop': { w: 2, d: 2, h: 32, wall: 'plaster', wallColor: 0xf0e2c6, plinth: 5, roof: 'hip', roofMat: 'clay', roofColor: 0xb65a38, roofH: 22, door: 'arched', windows: 2, emblem: 'coin', awning: 0xc23b3b, porch: true, seed: 41 },
+  'p-bank': { w: 2, d: 2, h: 40, wall: 'ashlar', wallColor: 0xdcd8cc, plinth: 8, roof: 'hip', roofMat: 'slate', roofColor: 0x34435f, roofH: 20, door: 'grand', windows: 2, emblem: 'coin', columns: true, seed: 42 },
+  'p-estate': { w: 2, d: 2, h: 32, wall: 'plaster', wallColor: 0xe9dfc8, plinth: 5, roof: 'hip', roofMat: 'clay', roofColor: 0x8e3a22, roofH: 22, door: 'arched', windows: 2, emblem: 'scale', porch: true, seed: 43 },
   'p-trading': { w: 2, d: 2, h: 34, wall: 'brick', wallColor: 0xa85a3c, plinth: 6, roof: 'hip', roofMat: 'slate', roofColor: 0x2d6170, roofH: 22, door: 'double', windows: 2, emblem: 'ship', porch: true, seed: 26 },
 };
 

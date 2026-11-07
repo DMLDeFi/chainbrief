@@ -10,7 +10,7 @@ import { FlyLayer } from './FlyLayer';
 import { IconBag, IconChart, IconCrown, IconGear, IconHouse, IconMedal, IconPeople, IconScale, IconScroll, IconWallet, IconPlus, IconMinus, IconMap, IconEmpire } from '../icons';
 import { EmpirePanel } from './panels/EmpirePanel';
 import { WorldMap } from './WorldMap';
-import type { MarketId } from '@mon/engine';
+import { CITY_DEFS, CITY_IDS, type MarketId } from '@mon/engine';
 import { Hud } from './Hud';
 import { Feed } from './Feed';
 import { Toasts } from './Toasts';
@@ -49,6 +49,19 @@ export function GameShell() {
   const params = useSearchParams();
   const [settings, setSettings] = useSettings();
   const [marketCity, setMarketCity] = useState<MarketId>('nearhaven');
+  // The town on screen: Nearhaven by default, any city after visiting it from the world map.
+  const [viewCity, setViewCity] = useState<MarketId>(() => {
+    const c = params.get('city');
+    return c && (CITY_IDS as readonly string[]).includes(c) ? (c as MarketId) : 'nearhaven';
+  });
+  const walk = useCallback((c: MarketId) => {
+    setViewCity(c);
+    setMarketCity(c);
+    setPanel(null);
+    const u = new URL(location.href);
+    if (c === 'nearhaven') u.searchParams.delete('city'); else u.searchParams.set('city', c);
+    history.replaceState(null, '', u);
+  }, []);
   const [panel, setPanel] = useState<PanelId | null>((params.get('panel') as PanelId) ?? null);
   const [merchantId, setMerchantId] = useState<string | null>(null);
   const [plotSel, setPlotSel] = useState<Selection | null>(null);
@@ -94,11 +107,13 @@ export function GameShell() {
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
 
+  const viewCityRef = useRef(viewCity);
+  viewCityRef.current = viewCity;
   const onSelect = useCallback((s: Selection) => {
     if (s.type === 'merchant') {
       setMerchantId(s.id);
       setPanel('merchants');
-    } else if (s.type === 'exchange') setPanel('market');
+    } else if (s.type === 'exchange') { setMarketCity(viewCityRef.current); setPanel('market'); }
     else {
       setPlotSel(s);
       setPanel('business');
@@ -125,7 +140,15 @@ export function GameShell() {
 
   return (
     <main className="fixed inset-0 overflow-hidden bg-ink" data-cinema={params.has('cinema') ? '' : undefined}>
-      <TownCanvas ref={town} world={world} playerId={me.user.id} onSelect={onSelect} settings={settings} />
+      <TownCanvas ref={town} world={world} playerId={me.user.id} onSelect={onSelect} settings={settings} city={viewCity} />
+      {viewCity !== 'nearhaven' && (
+        <div className="pointer-events-auto absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full border border-brass/50 bg-[#140f0b]/90 px-4 py-2 text-sm shadow-lg max-md:bottom-24">
+          <span className="display font-bold text-brass-bright">{CITY_DEFS[viewCity].name}</span>
+          <span className="text-xs text-muted max-sm:hidden">{CITY_DEFS[viewCity].title}</span>
+          <button onClick={() => walk('nearhaven')} className="btn btn-ghost px-2.5 py-0.5 text-xs">Back to Nearhaven</button>
+          <button onClick={() => setPanel('world')} className="btn btn-ghost px-2.5 py-0.5 text-xs">World map</button>
+        </div>
+      )}
       <div className="vignette absolute inset-0" />
 
       <Hud world={world} me={me} onOpen={open} connected={connected} />
@@ -159,12 +182,12 @@ export function GameShell() {
       {/* Panel area */}
       {panel && (
         <div className="pointer-events-none absolute inset-y-0 left-16 z-30 flex items-stretch py-20 pl-2 pr-4 max-md:inset-x-0 max-md:left-0 max-md:px-2 max-md:pb-20 max-md:pt-24 md:right-[340px]">
-          {panel === 'world' && <WorldMap world={world} me={me} viewCity={marketCity} onClose={() => setPanel(null)} onVisit={(c) => { setMarketCity(c); setPanel('market'); }} />}
+          {panel === 'world' && <WorldMap world={world} me={me} viewCity={marketCity} onClose={() => setPanel(null)} onVisit={(c) => { setMarketCity(c); setPanel('market'); }} onWalk={walk} />}
           {panel === 'empire' && <EmpirePanel world={world} me={me} onClose={() => setPanel(null)} />}
           {panel === 'market' && <MarketPanel world={world} me={me} city={marketCity} onClose={() => setPanel(null)} />}
           {panel === 'inventory' && <InventoryPanel world={world} me={me} onClose={() => setPanel(null)} onOpen={open} />}
           {panel === 'merchants' && <MerchantsPanel world={world} me={me} selected={merchantId} onSelect={showMerchant} onBack={() => setMerchantId(null)} onClose={() => setPanel(null)} />}
-          {panel === 'business' && <BusinessPanel world={world} me={me} selection={plotSel} onClose={() => { setPanel(null); setPlotSel(null); }} />}
+          {panel === 'business' && <BusinessPanel world={world} me={me} city={viewCity} selection={plotSel} onClose={() => { setPanel(null); setPlotSel(null); }} />}
           {panel === 'economy' && <EconomyPanel world={world} onClose={() => setPanel(null)} onMerchant={showMerchant} />}
           {panel === 'ledger' && <TransactionsPanel me={me} onClose={() => setPanel(null)} />}
           {panel === 'leaderboard' && <LeaderboardPanel me={me} onClose={() => setPanel(null)} />}

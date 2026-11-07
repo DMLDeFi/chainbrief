@@ -1,4 +1,5 @@
 import { ECONOMY, MARKETS, RESOURCE_DEFS, RESOURCES, type MarketId, type Recipe, type Resource } from './config';
+import { invalidateBizIndex, ownedBy } from './bizIndex';
 import { freightCost, travelTicks } from './cities';
 import { CITY_DEFS } from './cities';
 import { financeDaily } from './corporate';
@@ -193,8 +194,8 @@ export const businessMaxWorkers = (b: Business) => BUSINESS_DEFS[b.kind].maxWork
 
 export function warehouseBonus(world: WorldState, playerId: string, city: MarketId = 'nearhaven'): number {
   let bonus = 0;
-  for (const b of Object.values(world.businesses)) {
-    if (b.ownerId === playerId && b.kind === 'warehouse' && (b.city ?? 'nearhaven') === city) bonus += Math.round(BUSINESS_DEFS.warehouse.storageBonus![b.level - 1] * affinity(city, 'warehouse'));
+  for (const b of ownedBy(world, playerId)) {
+    if (b.kind === 'warehouse' && (b.city ?? 'nearhaven') === city) bonus += Math.round(BUSINESS_DEFS.warehouse.storageBonus![b.level - 1] * affinity(city, 'warehouse'));
   }
   return bonus;
 }
@@ -202,7 +203,7 @@ export function warehouseBonus(world: WorldState, playerId: string, city: Market
 /** Coordination overhead: every business beyond the third makes running each one a little dearer. */
 export function overheadFactor(world: WorldState, playerId: string, companyId?: string): number {
   // Coordination costs grow within each company: subsidiaries are run separately.
-  const n = Object.values(world.businesses).filter((b) => b.ownerId === playerId && (b.companyId ?? undefined) === (companyId ?? undefined)).length;
+  const n = ownedBy(world, playerId).filter((b) => (b.companyId ?? undefined) === (companyId ?? undefined)).length;
   return 1 + 0.06 * Math.max(0, n - 3);
 }
 /** Building cost of a business of this kind in that city. */
@@ -224,7 +225,7 @@ export function businessQuote(world: WorldState, playerId: string, kind: Busines
   const ownLand = !!p?.land.some((l) => l.city === city);
   const grant = !!p && !ownLand && starterGrant(world, p, city);
   const land = ownLand || grant ? 0 : landPrice(world, city);
-  return { build, land, total: money(build + land), ownLand, grant, affinity: affinity(city, kind), plotsFree: plotCount(world, city) - plotsTaken(world, city) + (ownLand ? 1 : 0) };
+  return { build, land, total: money(build + land), ownLand, grant, affinity: affinity(city, kind), plotsFree: plotCount(world, city) - plotsTaken(world, city) + (ownLand ? 1 : 0), outskirts: !ownLand && !grant && plotsTaken(world, city) >= plotCount(world, city) };
 }
 
 export function buyBusiness(world: WorldState, playerId: string, kind: BusinessKind, city: unknown = 'nearhaven'): Result<Business> {
@@ -270,6 +271,7 @@ export function buyBusiness(world: WorldState, playerId: string, kind: BusinessK
     plot,
   };
   world.businesses[b.id] = b;
+  invalidateBizIndex(world);
   if (kind === 'trading' && !p.marketAccess.includes('aurora')) p.marketAccess.push('aurora');
   world.ledger.push({ tick: world.tick, playerId, type: 'business.buy', goldDelta: -q.total, details: { businessId: b.id, kind, city, land: q.land } });
   pushFeed(world, { kind: 'player', actor: playerId, market: city, text: `${p.name} opened a new ${def.name.toLowerCase()} in ${cityName}.`, severity: 'good' });
@@ -310,6 +312,7 @@ export function sellBusiness(world: WorldState, playerId: string, businessId: st
   p.gold = money(p.gold + price);
   releasePlot(world, city, b.plot);
   delete world.businesses[b.id];
+  invalidateBizIndex(world);
   world.ledger.push({ tick: world.tick, playerId, type: 'business.sell', goldDelta: price, details: { businessId, kind: b.kind, city } });
   pushFeed(world, { kind: 'player', actor: playerId, market: city, text: `${p.name} sold ${b.name} for ${price}g.` });
   return ok({ price });
@@ -525,9 +528,9 @@ function pullLocal(world: WorldState, b: Business, r: Resource, want: number): n
   const p = world.players[b.ownerId];
   const city: MarketId = b.city ?? 'nearhaven';
   let moved = 0;
-  for (const o of Object.values(world.businesses)) {
+  for (const o of ownedBy(world, b.ownerId)) {
     if (moved >= want) break;
-    if (o.id === b.id || o.ownerId !== b.ownerId || (o.city ?? 'nearhaven') !== city || o.policy.autoSell) continue;
+    if (o.id === b.id || (o.city ?? 'nearhaven') !== city || o.policy.autoSell) continue;
     const orc = recipeFor(o);
     if (!orc || !(r in orc.outputs)) continue;
     const take = Math.min(want - moved, Math.floor(o.inventory[r] ?? 0));

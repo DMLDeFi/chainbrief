@@ -1,3 +1,6 @@
+import type { MarketId } from '@mon/engine';
+import { generateCity, type CityLayout } from './cityLayouts';
+import { SPECS } from './art/buildings';
 /** Static town layout in isometric grid coordinates. */
 export const MAP = 30;
 export const TILE_W = 64;
@@ -25,7 +28,7 @@ export interface BuildingDef {
   door: { gx: number; gy: number };
 }
 
-export const BUILDINGS: BuildingDef[] = [
+const NEARHAVEN_BUILDINGS: BuildingDef[] = [
   { id: 'exchange', label: 'Nearhaven Exchange', gx: 14, gy: 14, w: 3, d: 3, h: 46, wall: 0xd8c39a, roof: 0x7b3b2c, style: 'hall', door: { gx: 15, gy: 17 } },
   { id: 'farm', label: "Farmer John's Farmstead", merchant: 'farmer', gx: 22, gy: 5, w: 2, d: 2, h: 26, wall: 0xc9a46c, roof: 0x9a4f2e, style: 'barn', door: { gx: 22, gy: 7 } },
   { id: 'bakery', label: "Mara's Hearth Bakery", merchant: 'baker', gx: 11, gy: 10, w: 2, d: 2, h: 30, wall: 0xe8d6ad, roof: 0xb4562f, style: 'house', chimney: true, door: { gx: 12, gy: 12 } },
@@ -40,13 +43,14 @@ export const BUILDINGS: BuildingDef[] = [
 ];
 
 /** Plots for player-owned businesses (index = engine plot number). */
-export const PLOTS: Array<{ gx: number; gy: number }> = [
+const NEARHAVEN_PLOTS: Array<{ gx: number; gy: number }> = [
   { gx: 11, gy: 6 }, { gx: 17, gy: 6 }, { gx: 7, gy: 11 }, { gx: 6, gy: 13 },
   { gx: 22, gy: 10 }, { gx: 21, gy: 16 }, { gx: 16, gy: 22 }, { gx: 12, gy: 22 },
   { gx: 6, gy: 18 }, { gx: 18, gy: 25 }, { gx: 26, gy: 18 }, { gx: 13, gy: 3 },
 ];
 
-export function tileKind(gx: number, gy: number): 'water' | 'road' | 'plaza' | 'field' | 'dirt' | 'grass' | 'sand' {
+export type TileKind = 'water' | 'road' | 'plaza' | 'field' | 'dirt' | 'grass' | 'sand';
+function nearhavenTile(gx: number, gy: number): TileKind {
   if (gx <= 2 || (gx === 3 && gy % 5 !== 0)) return 'water';
   if (gx === 3) return 'sand';
   if (gx >= 13 && gx <= 17 && gy >= 13 && gy <= 17) return 'plaza';
@@ -69,7 +73,7 @@ export const hash2 = (x: number, y: number) => {
 
 /** Decorative (non-merchant) architecture: tavern and town houses. */
 export interface DecorDef { id: string; label: string; gx: number; gy: number; w: number; d: number }
-export const DECOR: DecorDef[] = [
+const NEARHAVEN_DECOR: DecorDef[] = [
   { id: 'tavern', label: 'The Gilded Tankard — tavern & inn', gx: 11, gy: 16, w: 2, d: 2 },
   { id: 'house0', label: 'Town house', gx: 19, gy: 7, w: 1, d: 1 },
   { id: 'house1', label: 'Town house', gx: 10, gy: 6, w: 1, d: 1 },
@@ -81,3 +85,32 @@ export const DECOR: DecorDef[] = [
   { id: 'house7', label: 'Town house', gx: 16, gy: 19, w: 1, d: 1 },
   { id: 'house8', label: 'Town house', gx: 13, gy: 19, w: 1, d: 1 },
 ];
+
+// ------------------------------------------------------------------ city ---
+// The town being shown. These are live bindings: the scene reads whichever
+// city's layout was selected (with setCityLayout) before the game was created.
+export let CITY_ID: MarketId = 'nearhaven';
+export let BUILDINGS: BuildingDef[] = NEARHAVEN_BUILDINGS;
+export let DECOR: DecorDef[] = NEARHAVEN_DECOR;
+export let PLOTS: Array<{ gx: number; gy: number }> = NEARHAVEN_PLOTS;
+export let tileKind: (gx: number, gy: number) => TileKind = nearhavenTile;
+/** Props for generated towns (Nearhaven's hand-placed props live in the scene). */
+export let CITY_PROPS: CityLayout['props'] | null = null;
+export let CITY_BRIDGE = true;
+
+const cache = new Map<MarketId, CityLayout>();
+/** Nearhaven's own specs, restored before another city's are laid over them. */
+const BASE_SPECS = { ...SPECS };
+export function setCityLayout(city: MarketId, exchangeName: string) {
+  CITY_ID = city;
+  for (const k of Object.keys(SPECS)) if (!(k in BASE_SPECS)) delete SPECS[k];
+  Object.assign(SPECS, BASE_SPECS);
+  if (city === 'nearhaven') {
+    BUILDINGS = NEARHAVEN_BUILDINGS; DECOR = NEARHAVEN_DECOR; PLOTS = NEARHAVEN_PLOTS; tileKind = nearhavenTile; CITY_PROPS = null; CITY_BRIDGE = true;
+    return;
+  }
+  let L = cache.get(city);
+  if (!L) { L = generateCity(city, exchangeName, 1000 + city.length * 97 + city.charCodeAt(0)); cache.set(city, L); }
+  BUILDINGS = L.buildings; DECOR = L.decor; PLOTS = L.plots; tileKind = L.tileKind; CITY_PROPS = L.props; CITY_BRIDGE = L.bridge;
+  Object.assign(SPECS, L.specs);
+}
