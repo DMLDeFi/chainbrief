@@ -14,7 +14,8 @@
     "test": "vitest run",
     "typecheck": "tsc -p packages/engine && tsc -p apps/server && tsc -p apps/web --noEmit",
     "sim": "tsx scripts/simulate.ts",
-    "keygen": "tsx scripts/keygen.ts"
+    "keygen": "tsx scripts/keygen.ts",
+    "start:public": "node scripts/start-public.mjs"
   },
   "engines": {
     "node": ">=20"
