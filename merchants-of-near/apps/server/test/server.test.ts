@@ -152,6 +152,26 @@ describe('authoritative actions', () => {
     expect(r.json().feed).toBeGreaterThan(0);
   });
 
+  it('opens city charters, trades in that city and ships goods home', async () => {
+    const { cookie } = await register();
+    const id = (await ctx.app.inject({ method: 'GET', url: '/api/me', headers: { cookie } })).json().player.id;
+    ctx.game.world.players[id].gold = 400; // a starting purse cannot cover a charter, grain and freight together
+    expect((await act(cookie, { type: 'city.charter', city: 'atlantis' })).statusCode).toBe(400);
+    expect((await act(cookie, { type: 'city.charter', city: 'kingsreach' })).statusCode).toBe(422); // needs Level 3
+    expect((await act(cookie, { type: 'city.charter', city: 'goldenvale' })).statusCode).toBe(200);
+    expect((await act(cookie, { type: 'trade', side: 'buy', resource: 'wheat', qty: 5, market: 'goldenvale' })).statusCode).toBe(200);
+    const ship = await act(cookie, { type: 'ship', from: 'goldenvale', to: 'nearhaven', resource: 'wheat', qty: 5 });
+    expect(ship.statusCode, ship.body).toBe(200);
+    let me = (await ctx.app.inject({ method: 'GET', url: '/api/me', headers: { cookie } })).json();
+    expect(me.player.charters).toContain('goldenvale');
+    expect(me.player.shipments).toHaveLength(1);
+    ctx.game.world.tick = ship.json().data.arriveTick - 1;
+    await ctx.app.inject({ method: 'POST', url: '/api/sim/fast-forward', headers: { cookie }, payload: { days: 1 } });
+    me = (await ctx.app.inject({ method: 'GET', url: '/api/me', headers: { cookie } })).json();
+    expect(me.player.inventory.wheat).toBe(5);
+    expect(me.player.shipments).toHaveLength(0);
+  });
+
   it('records every gold movement in the ledger', async () => {
     const { cookie } = await register();
     await act(cookie, { type: 'trade', side: 'buy', resource: 'wheat', qty: 3 });

@@ -54,7 +54,7 @@ export function Delta({ value, className = '' }: { value: number; className?: st
   const up = value > 0.0005, down = value < -0.0005;
   return (
     <span className={`num text-xs font-bold ${up ? 'text-moss' : down ? 'text-ember' : 'text-muted'} ${className}`}>
-      {up ? '▲' : down ? '▼' : '•'} {Math.abs(value * 100).toFixed(1)}%
+      {up ? '▲' : down ? '▼' : '•'} {Math.abs(value * 100) >= 100 ? Math.abs(value * 100).toFixed(0) : Math.abs(value * 100).toFixed(1)}%
     </span>
   );
 }

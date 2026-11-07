@@ -7,7 +7,9 @@ import { gameAudio } from '@/lib/audio';
 import type { Selection } from '@/game/TownScene';
 import { TownCanvas, type TownHandle } from '../TownCanvas';
 import { FlyLayer } from './FlyLayer';
-import { IconBag, IconChart, IconCrown, IconGear, IconHouse, IconMedal, IconPeople, IconScale, IconScroll, IconWallet, IconPlus, IconMinus } from '../icons';
+import { IconBag, IconChart, IconCrown, IconGear, IconHouse, IconMedal, IconPeople, IconScale, IconScroll, IconWallet, IconPlus, IconMinus, IconMap } from '../icons';
+import { WorldMap } from './WorldMap';
+import type { MarketId } from '@mon/engine';
 import { Hud } from './Hud';
 import { Feed } from './Feed';
 import { Toasts } from './Toasts';
@@ -23,9 +25,10 @@ import { WalletPanel } from './panels/WalletPanel';
 import { SettingsPanel } from './panels/SettingsPanel';
 import { DemoGuide } from './DemoGuide';
 
-export type PanelId = 'market' | 'inventory' | 'merchants' | 'business' | 'economy' | 'ledger' | 'leaderboard' | 'achievements' | 'wallet' | 'settings';
+export type PanelId = 'world' | 'market' | 'inventory' | 'merchants' | 'business' | 'economy' | 'ledger' | 'leaderboard' | 'achievements' | 'wallet' | 'settings';
 
 const DOCK: Array<{ id: PanelId; label: string; icon: React.ReactNode; key: string }> = [
+  { id: 'world', label: 'World Map', icon: <IconMap />, key: 'm' },
   { id: 'market', label: 'Marketplace', icon: <IconScale />, key: '1' },
   { id: 'inventory', label: 'Inventory', icon: <IconBag />, key: '2' },
   { id: 'merchants', label: 'Merchants', icon: <IconPeople />, key: '3' },
@@ -43,6 +46,7 @@ export function GameShell() {
   const router = useRouter();
   const params = useSearchParams();
   const [settings, setSettings] = useSettings();
+  const [marketCity, setMarketCity] = useState<MarketId>('nearhaven');
   const [panel, setPanel] = useState<PanelId | null>((params.get('panel') as PanelId) ?? null);
   const [merchantId, setMerchantId] = useState<string | null>(null);
   const [plotSel, setPlotSel] = useState<Selection | null>(null);
@@ -153,7 +157,8 @@ export function GameShell() {
       {/* Panel area */}
       {panel && (
         <div className="pointer-events-none absolute inset-y-0 left-16 z-30 flex items-stretch py-20 pl-2 pr-4 max-md:inset-x-0 max-md:left-0 max-md:px-2 max-md:pb-20 max-md:pt-24 md:right-[340px]">
-          {panel === 'market' && <MarketPanel world={world} me={me} onClose={() => setPanel(null)} />}
+          {panel === 'world' && <WorldMap world={world} me={me} viewCity={marketCity} onClose={() => setPanel(null)} onVisit={(c) => { setMarketCity(c); setPanel('market'); }} />}
+          {panel === 'market' && <MarketPanel world={world} me={me} city={marketCity} onClose={() => setPanel(null)} />}
           {panel === 'inventory' && <InventoryPanel world={world} me={me} onClose={() => setPanel(null)} onOpen={open} />}
           {panel === 'merchants' && <MerchantsPanel world={world} me={me} selected={merchantId} onSelect={showMerchant} onBack={() => setMerchantId(null)} onClose={() => setPanel(null)} />}
           {panel === 'business' && <BusinessPanel world={world} me={me} selection={plotSel} onClose={() => { setPanel(null); setPlotSel(null); }} />}

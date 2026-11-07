@@ -14,6 +14,8 @@ import {
   publicSnapshot,
   RESOURCE_DEFS,
   MARKET_DEFS,
+  CITY_DEFS,
+  ROUTES,
   evaluateDeal,
 } from '@mon/engine';
 import type { ServerConfig } from './config';
@@ -84,7 +86,7 @@ export async function buildApp(deps: AppDeps) {
 
   // ------------------------------------------------------------ public ---
   app.get('/api/health', async () => ({ ok: true, tick: game.world.tick, store: store.kind, llm: dialogue.enabled, near: near.publicConfig().certificatesEnabled }));
-  app.get('/api/catalog', async () => ({ ...catalog, RESOURCE_DEFS, MARKET_DEFS, fastForward: config.allowFastForward, maxFastForwardDays: config.maxFastForwardDays }));
+  app.get('/api/catalog', async () => ({ ...catalog, RESOURCE_DEFS, MARKET_DEFS, CITY_DEFS, ROUTES, fastForward: config.allowFastForward, maxFastForwardDays: config.maxFastForwardDays }));
   // Local music: audio files the player dropped into apps/web/public/audio/
   // (gitignored, never committed). Only names with safe audio extensions are listed.
   const audioDir = process.env.AUDIO_DIR ?? path.resolve(process.cwd(), '../web/public/audio');

@@ -44,6 +44,7 @@ const line = (d: string) =>
   };
 
 export const IconBag = line('M6 8h12l-1 12H7L6 8Zm3 0V6a3 3 0 0 1 6 0v2');
+export const IconMap = line('M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2V6Zm6-2v14m6-12v14');
 export const IconScale = line('M12 4v16M5 20h14M4 9l3-5 3 5a3 3 0 0 1-6 0Zm10 0l3-5 3 5a3 3 0 0 1-6 0ZM7 4h10');
 export const IconPeople = line('M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-6 9a6 6 0 0 1 12 0M16 5.5a3 3 0 0 1 0 5.5M18 20a6 6 0 0 0-3-5.2');
 export const IconHouse = line('M4 11l8-6 8 6v9H4v-9Zm6 9v-5h4v5');

@@ -1,6 +1,6 @@
 'use client';
-import { useMemo, useState } from 'react';
-import type { PublicSnapshot, Resource } from '@mon/engine';
+import { useEffect, useMemo, useState } from 'react';
+import { CITY_DEFS, MARKET_DEFS, MARKETS, type MarketId, type PublicSnapshot, type Resource } from '@mon/engine';
 import type { Me } from '@/lib/api';
 import { RESOURCE_DEFS, RESOURCES, estimate } from '@/lib/catalog';
 import { useAction, useFetch } from '@/lib/hooks';
@@ -9,34 +9,59 @@ import { gold } from '@/lib/format';
 import { Badge, Delta, Drawer, Empty, Meter, Sparkline, Tabs } from '../../ui';
 import { Coin, IconScale, ResourceIcon } from '../../icons';
 
-type Tab = 'nearhaven' | 'aurora' | 'players';
+type Tab = MarketId | 'players';
 
-export function MarketPanel({ world, me, onClose }: { world: PublicSnapshot; me: Me; onClose: () => void }) {
-  const [tab, setTab] = useState<Tab>('nearhaven');
+export function MarketPanel({ world, me, onClose, city = 'nearhaven' }: { world: PublicSnapshot; me: Me; onClose: () => void; city?: MarketId }) {
+  const [tab, setTab] = useState<Tab>(city);
+  useEffect(() => setTab(city), [city]);
   const [sel, setSel] = useState<Resource>('wheat');
   const p = me.player;
-  const auroraLocked = !p.marketAccess.includes('aurora');
+  const open = (c: MarketId) => c === 'nearhaven' || p.charters.includes(c) || p.marketAccess.includes(c);
 
   return (
-    <Drawer wide title="Marketplace" subtitle="Prices are set by supply, demand and every trade — including yours" icon={<IconScale />} onClose={onClose}>
-      <Tabs<Tab> value={tab} onChange={setTab} options={[{ value: 'nearhaven', label: 'Nearhaven Exchange' }, { value: 'aurora', label: `Port Aurora${auroraLocked ? ' 🔒' : ''}` }, { value: 'players', label: 'Player Market' }]} />
+    <Drawer wide title="Marketplace" subtitle="Six city exchanges. Prices are set by each city's supply, demand and every trade — including yours" icon={<IconScale />} onClose={onClose}>
+      <div className="mb-4 flex flex-wrap gap-1.5" role="tablist" aria-label="Markets">
+        {[...MARKETS, 'players' as const].map((c) => (
+          <button key={c} role="tab" aria-selected={tab === c} onClick={() => setTab(c)}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${tab === c ? 'border-brass bg-brass/15 text-brass-bright' : 'border-line/70 text-parchment-dim hover:border-brass-deep'}`}>
+            {c === 'players' ? 'Player Market' : `${CITY_DEFS[c].name}${open(c) ? '' : ' 🔒'}`}
+          </button>
+        ))}
+      </div>
       {tab === 'players' ? (
         <PlayerMarket world={world} me={me} />
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[1.25fr_1fr]">
-          <ResourceTable market={world.markets[tab]} sel={sel} onSel={setSel} other={world.markets[tab === 'nearhaven' ? 'aurora' : 'nearhaven']} />
-          {tab === 'aurora' && auroraLocked ? (
-            <div className="panel p-5 text-sm text-parchment-dim">
-              <Badge tone="river">Locked</Badge>
-              <h3 className="display mt-3 text-lg">Port Aurora</h3>
-              <p className="mt-2">A distant port, six hours by caravan. Its prices move independently — Trader Selene profits from the gaps. Reach <b>Level 4</b> or found a <b>Trading Company</b> to trade here directly.</p>
-            </div>
-          ) : (
-            <TradeBox market={world.markets[tab]} marketId={tab} r={sel} me={me} />
-          )}
-        </div>
+        <>
+          <p className="-mt-1 mb-3 text-xs text-muted"><b className="text-parchment-dim">{CITY_DEFS[tab].title}.</b> {MARKET_DEFS[tab].description}</p>
+          <div className="grid gap-4 lg:grid-cols-[1.25fr_1fr]">
+            <ResourceTable market={world.markets[tab]} sel={sel} onSel={setSel} other={world.markets[tab === 'nearhaven' ? 'goldenvale' : 'nearhaven']} />
+            {open(tab) ? <TradeBox market={world.markets[tab]} marketId={tab} r={sel} me={me} /> : <CharterCard city={tab} me={me} />}
+          </div>
+        </>
       )}
     </Drawer>
+  );
+}
+
+/** Locked city: what it takes to open a trading office (and depot) there. */
+export function CharterCard({ city, me }: { city: MarketId; me: Me }) {
+  const { run, busy } = useAction();
+  const def = CITY_DEFS[city];
+  const c = def.charter!;
+  const p = me.player;
+  const levelOk = p.level >= c.level, goldOk = p.gold >= c.cost;
+  return (
+    <div className="panel p-5 text-sm text-parchment-dim">
+      <Badge tone="river">No office yet</Badge>
+      <h3 className="display mt-3 text-lg text-parchment">{def.name}</h3>
+      <p className="mt-2">To trade here you need a <b>trading office</b>. It gives you a depot of {p.depotCapacity} units in {def.name}: goods you buy here stay here until you ship them.</p>
+      <ul className="mt-3 space-y-1 text-xs">
+        <li className={levelOk ? 'text-moss' : 'text-ember'}>{levelOk ? '✓' : '✗'} Level {c.level} or higher (you are Level {p.level})</li>
+        <li className={goldOk ? 'text-moss' : 'text-ember'}>{goldOk ? '✓' : '✗'} {c.cost} gold charter fee, paid to the city</li>
+      </ul>
+      <p className="mt-3 text-xs">Known for: {def.strengths.join(', ')}. Short of: {def.needs.join(', ')}.</p>
+      <button disabled={busy || !levelOk || !goldOk} onClick={() => run({ type: 'city.charter', city }, `Trading office opened in ${def.name}`)} className="btn btn-gold mt-4 w-full py-2">Open trading office · {c.cost}g</button>
+    </div>
   );
 }
 
@@ -77,13 +102,17 @@ function ResourceTable({ market, other, sel, onSel }: { market: PublicSnapshot['
   );
 }
 
-function TradeBox({ market, marketId, r, me }: { market: PublicSnapshot['markets']['nearhaven']; marketId: 'nearhaven' | 'aurora'; r: Resource; me: Me }) {
+function TradeBox({ market, marketId, r, me }: { market: PublicSnapshot['markets']['nearhaven']; marketId: MarketId; r: Resource; me: Me }) {
   const [qty, setQty] = useState(5);
   const { run, busy } = useAction();
   const p = me.player;
   const d = market.resources[r];
-  const held = Math.floor(p.inventory[r] ?? 0);
-  const free = Math.floor(p.capacity - p.used);
+  // Goods bought in a city stay in that city: the home warehouse in Nearhaven, your office depot elsewhere.
+  const home = marketId === 'nearhaven';
+  const store = home ? p.inventory : (p.depots[marketId] ?? {});
+  const held = Math.floor(store[r] ?? 0);
+  const inbound = p.shipments.filter((s) => s.to === marketId).reduce((a, s) => a + s.qty, 0);
+  const free = Math.floor(home ? p.capacity - p.used : p.depotCapacity - Object.values(store).reduce((a, v) => a + (v ?? 0), 0) - inbound);
   const buy = useMemo(() => estimate(market, r, 'buy', qty), [market, r, qty]);
   const sell = useMemo(() => estimate(market, r, 'sell', qty), [market, r, qty]);
   const basis = p.costBasis[r];
@@ -126,7 +155,7 @@ function TradeBox({ market, marketId, r, me }: { market: PublicSnapshot['markets
       <div className="mt-4">
         <div className="mb-2 flex items-center justify-between">
           <span className="label">Quantity</span>
-          <span className="text-xs text-muted">You hold <b className="text-parchment">{held}</b>{basis ? ` @ ${gold(basis)}` : ''} · space {free}</span>
+          <span className="text-xs text-muted">{home ? 'Warehouse' : `${CITY_DEFS[marketId].name} depot`}: <b className="text-parchment">{held}</b>{basis ? ` @ ${gold(basis)}` : ''} · space {free}</span>
         </div>
         <div className="flex items-center gap-2">
           {[1, 5, 10, 25].map((q) => (

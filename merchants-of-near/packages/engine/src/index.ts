@@ -12,3 +12,5 @@ export * from './valuation';
 export * from './seed';
 export * from './world';
 export * from './views';
+export * from './cities';
+export * from './logistics';

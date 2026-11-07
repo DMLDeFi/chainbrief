@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import type { MerchantState, PublicSnapshot, Resource } from '@mon/engine';
+import { CITY_DEFS, type MerchantState, type PublicSnapshot, type Resource } from '@mon/engine';
 import { api, type Me } from '@/lib/api';
 import { Portrait } from '@/components/Portrait';
 import { RESOURCE_DEFS, RESOURCES, ROLE_COLOR, ROLE_TITLE } from '@/lib/catalog';
@@ -39,7 +39,7 @@ export function MerchantsPanel({ world, me, selected, onSelect, onBack, onClose 
                 <span className="text-muted"> — {m.lastDecision.reasons[0]}</span>
               </div>
             )}
-            {m.travel && <div className="mt-1.5 text-[11px] text-river">On the road to {m.travel.to === 'aurora' ? 'Port Aurora' : 'Nearhaven'} · arrives in {Math.max(0, m.travel.arriveTick - world.tick)}h</div>}
+            {m.travel && <div className="mt-1.5 text-[11px] text-river">On the road to {CITY_DEFS[m.travel.to].name} · arrives in {Math.max(0, m.travel.arriveTick - world.tick)}h</div>}
           </button>
         ))}
       </div>

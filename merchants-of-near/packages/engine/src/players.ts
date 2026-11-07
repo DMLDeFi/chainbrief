@@ -6,6 +6,8 @@ import { bumpMetric, evaluateProgression, refreshMissions } from './progression'
 import { playerCapacity } from './businesses';
 import { logDecision, remember, ROLE_SPECS } from './merchants';
 import { playerNetWorth } from './valuation';
+import { DEPOT_CAPACITY, hasAccess, storeFor, totalHeld } from './logistics';
+import { CITY_DEFS } from './cities';
 
 export const isResource = (r: unknown): r is Resource => typeof r === 'string' && (RESOURCES as readonly string[]).includes(r);
 const FOOD: Resource[] = ['bread', 'fish', 'livestock'];
@@ -39,6 +41,8 @@ export function registerPlayer(world: WorldState, id: string, name: string): Res
     credit: { repaid: 0, defaults: 0 },
     history: [],
     marketAccess: ['nearhaven'],
+    charters: [],
+    depots: {},
   };
   world.players[id] = p;
   refreshMissions(world, p);
@@ -75,7 +79,12 @@ export function playerTrade(world: WorldState, playerId: string, req: TradeReque
   const marketId: MarketId = req.market ?? 'nearhaven';
   const market = world.markets[marketId];
   if (!market) return fail('Unknown market');
-  if (!p.marketAccess.includes(marketId)) return fail(`You need a Trading Company or Level 4 to trade in ${market.name}`);
+  if (!hasAccess(p, marketId)) {
+    const c = CITY_DEFS[marketId].charter;
+    return fail(`Open a trading office in ${CITY_DEFS[marketId].name} to trade there${c ? ` (Level ${c.level}, ${c.cost}g)` : ''}`);
+  }
+  // Goods bought here are stored here: the home warehouse in Nearhaven, the office depot elsewhere.
+  const store = storeFor(p, marketId);
   const r = req.resource;
 
   const q = req.side === 'buy' ? quoteBuy(market, r, qty) : quoteSell(market, r, qty);
@@ -91,24 +100,25 @@ export function playerTrade(world: WorldState, playerId: string, req: TradeReque
   let realized = 0;
   if (req.side === 'buy') {
     if (p.gold < quote.total) return fail(`Not enough gold: need ${fmt(quote.total)}, have ${fmt(p.gold)}`);
-    const free = playerCapacity(world, playerId) - invTotal(p.inventory);
-    if (qty > free) return fail(`Warehouse full: room for ${Math.max(0, Math.floor(free))} more units`);
+    const cap = marketId === 'nearhaven' ? playerCapacity(world, playerId) : DEPOT_CAPACITY;
+    const free = cap - invTotal(store) - (marketId === 'nearhaven' ? 0 : Object.values(world.shipments).filter((x) => x.ownerId === p.id && x.to === marketId).reduce((a, x) => a + x.qty, 0));
+    if (qty > free) return fail(`${marketId === 'nearhaven' ? 'Warehouse' : `${CITY_DEFS[marketId].name} depot`} full: room for ${Math.max(0, Math.floor(free))} more units`);
     // -- validated; mutate --
     settleOnMarket(world, market, r, 'buy', quote);
-    const held = p.inventory[r] ?? 0;
+    const held = totalHeld(world, p, r);
     p.costBasis[r] = money(((p.costBasis[r] ?? 0) * held + quote.total) / (held + qty));
     p.gold = money(p.gold - quote.total);
-    addInv(p.inventory, r, qty);
+    addInv(store, r, qty);
     bumpMetric(p, 'unitsBought', qty);
     if (FOOD.includes(r)) bumpMetric(p, 'foodBought', qty);
   } else {
-    const held = p.inventory[r] ?? 0;
-    if (held < qty) return fail(`You only have ${Math.floor(held)} ${r}`);
+    const held = store[r] ?? 0;
+    if (held < qty) return fail(`You only have ${Math.floor(held)} ${r}${marketId === 'nearhaven' ? '' : ` in ${CITY_DEFS[marketId].name}`}`);
     settleOnMarket(world, market, r, 'sell', quote);
     realized = money((quote.avgPrice - (p.costBasis[r] ?? 0)) * qty);
     p.gold = money(p.gold + quote.total);
-    addInv(p.inventory, r, -qty);
-    if (!p.inventory[r]) delete p.costBasis[r];
+    addInv(store, r, -qty);
+    if (totalHeld(world, p, r) <= 0) delete p.costBasis[r];
     bumpMetric(p, 'unitsSold', qty);
     if (r === 'bread') bumpMetric(p, 'breadSold', qty);
     if (realized > 0) bumpMetric(p, 'profit', realized);

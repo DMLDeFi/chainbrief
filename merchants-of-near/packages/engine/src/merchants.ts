@@ -1,4 +1,5 @@
-import { ECONOMY, MARKETS, RESOURCE_DEFS, TRAVEL_TICKS, type MarketId, type Recipe, type Resource } from './config';
+import { ECONOMY, MARKETS, RESOURCE_DEFS, type MarketId, type Recipe, type Resource } from './config';
+import { CITY_DEFS, freightCost, travelTicks } from './cities';
 import type { MemoryItem, MerchantRole, MerchantState, Result, WorldState } from './types';
 import { addInv, clamp, dayOf, fail, fmt, money, ok, pct, pushFeed } from './internal';
 import { maxAffordable, quoteBuy, quoteSell, settleOnMarket, supplyLevel, type TradeQuote } from './market';
@@ -309,10 +310,23 @@ export interface Opportunity {
   expectedProfit: number;
 }
 
-/** Scan every resource for a profitable cross-market trade given a budget. */
-export function findOpportunity(world: WorldState, from: MarketId, budget: number, cargoCap: number, learned: Record<string, number> = {}): Opportunity | null {
-  const to = MARKETS.find((x) => x !== from)!;
+/**
+ * Scan every resource and every destination city for the most profitable
+ * caravan from `from`, net of freight, travel risk and what this merchant has
+ * learned about each route.
+ */
+export function findOpportunity(world: WorldState, from: MarketId, budget: number, cargoCap: number, learned: Record<string, number> = {}, destinations: readonly MarketId[] = MARKETS): Opportunity | null {
   let best: Opportunity | null = null;
+  for (const to of destinations) {
+    if (to === from) continue;
+    const o = bestOnRoute(world, from, to, budget, cargoCap, learned);
+    if (o && (!best || o.expectedProfit > best.expectedProfit)) best = o;
+  }
+  return best;
+}
+function bestOnRoute(world: WorldState, from: MarketId, to: MarketId, budget: number, cargoCap: number, learned: Record<string, number>): Opportunity | null {
+  let best: Opportunity | null = null;
+  const hours = travelTicks(from, to);
   for (const r of Object.keys(RESOURCE_DEFS) as Resource[]) {
     const a = world.markets[from];
     const b = world.markets[to];
@@ -328,8 +342,9 @@ export function findOpportunity(world: WorldState, from: MarketId, budget: numbe
       if (!buy.ok || !sell.ok) continue;
       const routeKey = `${from}>${to}:${r}`;
       const learnedAdj = learned[routeKey] ?? 1; // memory of realised vs expected
-      const expectedRevenue = sell.data.total * clamp(learnedAdj, 0.6, 1.1) * 0.97; // price risk during travel
-      const profit = expectedRevenue - buy.data.total - 6;
+      // Longer journeys carry more price risk; freight is paid per unit and hour.
+      const expectedRevenue = sell.data.total * clamp(learnedAdj, 0.6, 1.1) * (1 - 0.004 * hours);
+      const profit = expectedRevenue - buy.data.total - freightCost(from, to, q);
       if (!bestQ || profit > bestQ.expectedProfit) bestQ = { resource: r, from, to, qty: q, cost: buy.data.total, expectedRevenue, expectedProfit: profit };
     }
     if (bestQ && (!best || bestQ.expectedProfit > best.expectedProfit)) best = bestQ;
@@ -342,6 +357,7 @@ function runTrader(world: WorldState, m: MerchantState, idx: number): void {
     if (world.tick < m.travel.arriveTick) return;
     // Arrived: sell the cargo at the destination.
     const dest = m.travel.to;
+    const fromCity = m.travel.from;
     m.location = dest;
     const cargo = m.travel.cargo;
     const costBasis = m.travel.costBasis;
@@ -356,7 +372,7 @@ function runTrader(world: WorldState, m: MerchantState, idx: number): void {
     // Learn from the outcome: remember how realised revenue compared to the forecast for this route.
     const cargoRes = Object.keys(cargo)[0];
     if (cargoRes && expected > 0) {
-      const key = `${dest === 'aurora' ? 'nearhaven' : 'aurora'}>${dest}:${cargoRes}`;
+      const key = `${fromCity ?? (dest === "nearhaven" ? "aurora" : "nearhaven")}>${dest}:${cargoRes}`;
       m.routes[key] = money((m.routes[key] ?? 1) * 0.6 + (revenue / expected) * 0.4);
     }
     const profit = money(revenue - costBasis);
@@ -381,9 +397,11 @@ function runTrader(world: WorldState, m: MerchantState, idx: number): void {
     addInv(m.inventory, opp.resource, -opp.qty);
     const fromP = world.markets[opp.from].price[opp.resource];
     const toP = world.markets[opp.to].price[opp.resource];
-    m.travel = { to: opp.to, arriveTick: world.tick + TRAVEL_TICKS, cargo: { [opp.resource]: opp.qty }, costBasis: q.total + 6, expected: opp.expectedRevenue };
-    m.gold = money(m.gold - 6); // caravan hire & tolls
-    m.today.costs += 6;
+    const freight = freightCost(opp.from, opp.to, opp.qty);
+    m.travel = { to: opp.to, from: opp.from, arriveTick: world.tick + travelTicks(opp.from, opp.to), cargo: { [opp.resource]: opp.qty }, costBasis: q.total + freight, expected: opp.expectedRevenue };
+    m.gold = money(m.gold - freight); // caravan hire, tolls and carters, paid into the origin city
+    world.markets[opp.from].treasury = money(world.markets[opp.from].treasury + freight);
+    m.today.costs += freight;
     logDecision(m, world.tick, `Caravan: ${opp.qty} ${opp.resource} → ${world.markets[opp.to].name}`, [
       `${opp.resource} ${fmt(fromP)}g here vs ${fmt(toP)}g there`,
       `Expected profit ${fmt(opp.expectedProfit)}g on ${fmt(opp.cost)}g`,
@@ -397,10 +415,10 @@ function runTrader(world: WorldState, m: MerchantState, idx: number): void {
       severity: 'good',
     });
   } else if (m.location !== 'nearhaven') {
-    m.travel = { to: 'nearhaven', arriveTick: world.tick + TRAVEL_TICKS, cargo: {}, costBasis: 0 };
-    logDecision(m, world.tick, 'Returning home empty', ['No profitable cargo found in Port Aurora']);
+    m.travel = { to: 'nearhaven', from: m.location, arriveTick: world.tick + travelTicks(m.location, 'nearhaven'), cargo: {}, costBasis: 0 };
+    logDecision(m, world.tick, 'Returning home empty', [`No profitable cargo found in ${CITY_DEFS[m.location].name}`]);
   } else if (world.tick % 24 === 0) {
-    logDecision(m, world.tick, 'Waiting for an opportunity', [opp ? `Best route only yields ${fmt(opp.expectedProfit)}g (need ${fmt(minProfit)}g)` : 'No price gap above 12% between markets']);
+    logDecision(m, world.tick, 'Waiting for an opportunity', [opp ? `Best route (${CITY_DEFS[opp.to].name}) only yields ${fmt(opp.expectedProfit)}g (need ${fmt(minProfit)}g)` : 'No price gap above 12% between cities']);
   }
 }
 

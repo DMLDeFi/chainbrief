@@ -1,4 +1,6 @@
-import { MARKETS, RESOURCES, TIME } from './config';
+import { MARKETS, RESOURCES, TIME, type MarketId } from './config';
+import { CITY_DEFS } from './cities';
+import { DEPOT_CAPACITY } from './logistics';
 import type { WorldState } from './types';
 import { dayOf, hourOf, invTotal, money } from './internal';
 import { merchantNetWorth, playerNetWorth, shareValue, debtOf } from './valuation';
@@ -31,11 +33,13 @@ export function publicSnapshot(world: WorldState, feedSince = 0) {
                 production: Math.round(m.productionRate[r] * 100) / 100,
                 consumption: Math.round(m.consumptionRate[r] * 100) / 100,
                 shortage: Math.round(m.shortageRate[r] * 100) / 100,
-                intraday: m.intraday[r],
+                // Full hourly curve for the home exchange; the last day for other cities keeps the stream small.
+                intraday: id === 'nearhaven' ? m.intraday[r] : m.intraday[r].slice(-24),
               },
             ]),
           ),
           volumeToday: money(m.volumeToday),
+          treasury: money(m.treasury),
         },
       ];
     }),
@@ -70,6 +74,12 @@ export function publicSnapshot(world: WorldState, feedSince = 0) {
     businesses: Object.values(world.businesses).map((b) => ({ id: b.id, kind: b.kind, plot: b.plot, level: b.level, owner: world.players[b.ownerId]?.name ?? '?', ownerId: b.ownerId })),
     feed: world.feed.filter((f) => f.id > feedSince).slice(-60),
     players: Object.keys(world.players).length,
+    cities: Object.fromEntries(MARKETS.map((id) => [id, { population: id === 'nearhaven' ? world.population : (world.cities?.[id]?.population ?? CITY_DEFS[id].population) }])) as Record<MarketId, { population: number }>,
+    /** Caravans on the road (AI traders and player shipments), for the world map. */
+    traffic: [
+      ...Object.values(world.merchants).filter((m) => m.travel).map((m) => ({ kind: 'merchant' as const, id: m.id, name: m.name, from: m.travel!.from ?? m.location, to: m.travel!.to, arriveTick: m.travel!.arriveTick })),
+      ...Object.values(world.shipments ?? {}).map((s) => ({ kind: 'shipment' as const, id: s.id, name: world.players[s.ownerId]?.name ?? 'A merchant', from: s.from, to: s.to, arriveTick: s.arriveTick, departTick: s.departTick, resource: s.resource, qty: s.qty })),
+    ],
   };
 }
 export type PublicSnapshot = ReturnType<typeof publicSnapshot>;
@@ -112,6 +122,10 @@ export function playerView(world: WorldState, playerId: string) {
     loans: activeLoansOf(world, { kind: 'player', id: playerId }),
     credit: { ...p.credit, offer: evaluateCredit(world, { kind: 'player', id: playerId }, 50) },
     listings: Object.values(world.listings).filter((l) => l.sellerId === playerId && l.status === 'open'),
+    charters: p.charters ?? [],
+    depots: p.depots ?? {},
+    depotCapacity: DEPOT_CAPACITY,
+    shipments: Object.values(world.shipments ?? {}).filter((s) => s.ownerId === playerId),
   };
 }
 export type PlayerView = NonNullable<ReturnType<typeof playerView>>;

@@ -355,6 +355,12 @@ export class TownScene extends Phaser.Scene {
     }
   }
 
+  /** True when the press and release both happened on the town itself, not on a UI panel drawn over it. */
+  private onCanvas(p: Phaser.Input.Pointer) {
+    const c = this.sys.game.canvas;
+    return p.downElement === c && (p.upElement === c || p.upElement == null);
+  }
+
   private makeInteractive(obj: Phaser.GameObjects.Image, label: string | (() => string), onClick: () => void) {
     obj.setInteractive({ pixelPerfect: true, alphaTolerance: 40, useHandCursor: true });
     obj.on('pointerover', () => {
@@ -366,8 +372,8 @@ export class TownScene extends Phaser.Scene {
       this.hoverLabel.setVisible(false);
       this.refreshClosedTints();
     });
-    obj.on('pointerup', () => {
-      if (this.dragDist < 8) onClick();
+    obj.on('pointerup', (p: Phaser.Input.Pointer) => {
+      if (this.dragDist < 8 && this.onCanvas(p)) onClick();
     });
   }
 
@@ -447,7 +453,7 @@ export class TownScene extends Phaser.Scene {
       const home = iso(spot[0], spot[1]);
       const sprite = this.add.sprite(home.x, home.y, key, 'idle0').setOrigin(0.5, 37 / 40).setDepth(home.y);
       sprite.setInteractive({ useHandCursor: true });
-      sprite.on('pointerup', () => this.dragDist < 8 && this.cb.onSelect({ type: 'merchant', id: b.merchant! }));
+      sprite.on('pointerup', (p: Phaser.Input.Pointer) => this.dragDist < 8 && this.onCanvas(p) && this.cb.onSelect({ type: 'merchant', id: b.merchant! }));
       sprite.on('pointerover', () => sprite.setTint(0xfff1cf));
       sprite.on('pointerout', () => sprite.clearTint());
       if (b.merchant === 'blacksmith') {

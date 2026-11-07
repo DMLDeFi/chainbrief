@@ -1,4 +1,6 @@
-import { ECONOMY, MARKETS, RESOURCE_DEFS, TRAVEL_TICKS, type Recipe, type Resource } from './config';
+import { ECONOMY, MARKETS, RESOURCE_DEFS, type MarketId, type Recipe, type Resource } from './config';
+import { freightCost, travelTicks } from './cities';
+import { hasAccess } from './logistics';
 import type { Business, BusinessKind, Result, WorldState } from './types';
 import { addInv, dayOf, fail, fmt, invTotal, money, newId, ok, pushFeed } from './internal';
 import { maxAffordable, quoteBuy, quoteSell, settleOnMarket } from './market';
@@ -209,7 +211,7 @@ export function collectFromBusiness(world: WorldState, playerId: string, busines
   return ok({ moved });
 }
 
-function bizTrade(world: WorldState, b: Business, side: 'buy' | 'sell', r: Resource, qty: number, marketId: 'nearhaven' | 'aurora' = 'nearhaven'): number {
+function bizTrade(world: WorldState, b: Business, side: 'buy' | 'sell', r: Resource, qty: number, marketId: MarketId = 'nearhaven'): number {
   const p = world.players[b.ownerId];
   const m = world.markets[marketId];
   const q = side === 'buy' ? quoteBuy(m, r, qty) : quoteSell(m, r, qty, ECONOMY.playerSellReserve);
@@ -240,6 +242,11 @@ function recipeFor(b: Business): (Recipe & { name: string }) | undefined {
 
 function runCaravan(world: WorldState, b: Business): void {
   const p = world.players[b.ownerId];
+  const payFreight = (from: MarketId, to: MarketId, qty: number) => {
+    const f = freightCost(from, to, qty);
+    p.gold = money(p.gold - f);
+    world.markets[from].treasury = money(world.markets[from].treasury + f);
+  };
   if (b.caravan) {
     if (world.tick < b.caravan.arriveTick) return;
     const dest = b.caravan.to;
@@ -248,14 +255,15 @@ function runCaravan(world: WorldState, b: Business): void {
       bizTrade(world, b, 'sell', r, Math.floor(q), dest);
     }
     const leftover = Object.keys(b.inventory).length;
-    b.caravan = dest === 'aurora' ? { to: 'nearhaven', arriveTick: world.tick + TRAVEL_TICKS, cargo: {}, costBasis: 0 } : undefined;
-    if (leftover === 0 && dest === 'aurora') {
-      // Look for a return cargo.
-      const opp = findOpportunity(world, 'aurora', p.gold * 0.5, businessCapacity(b) * BUSINESS_DEFS.trading.efficiency[b.level - 1]);
+    b.caravan = dest !== 'nearhaven' ? { to: 'nearhaven', arriveTick: world.tick + travelTicks(dest, 'nearhaven'), cargo: {}, costBasis: 0 } : undefined;
+    if (leftover === 0 && dest !== 'nearhaven') {
+      // Look for a return cargo home.
+      const opp = findOpportunity(world, dest, p.gold * 0.5, businessCapacity(b) * BUSINESS_DEFS.trading.efficiency[b.level - 1], {}, ['nearhaven']);
       if (opp && opp.expectedProfit > 5) {
-        if (bizTrade(world, b, 'buy', opp.resource, opp.qty, 'aurora') > 0) {
+        if (bizTrade(world, b, 'buy', opp.resource, opp.qty, dest) > 0) {
           addInv(b.inventory, opp.resource, -opp.qty);
-          b.caravan = { to: 'nearhaven', arriveTick: world.tick + TRAVEL_TICKS, cargo: { [opp.resource]: opp.qty }, costBasis: opp.cost };
+          payFreight(dest, 'nearhaven', opp.qty);
+          b.caravan = { to: 'nearhaven', arriveTick: world.tick + travelTicks(dest, 'nearhaven'), cargo: { [opp.resource]: opp.qty }, costBasis: opp.cost };
         }
       }
     }
@@ -263,11 +271,14 @@ function runCaravan(world: WorldState, b: Business): void {
   }
   if (world.tick % 4 !== 0 || b.workers < 1) return;
   const cap = Math.floor(businessCapacity(b) * BUSINESS_DEFS.trading.efficiency[b.level - 1] * Math.min(1, b.workers / 2));
-  const opp = findOpportunity(world, 'nearhaven', p.gold * 0.4, cap);
+  // The company trades with every city where its owner holds a charter.
+  const destinations = MARKETS.filter((c) => c !== 'nearhaven' && hasAccess(p, c));
+  const opp = findOpportunity(world, 'nearhaven', p.gold * 0.4, cap, {}, destinations);
   if (opp && opp.expectedProfit > 8 && opp.expectedProfit / opp.cost > 0.08) {
     if (bizTrade(world, b, 'buy', opp.resource, opp.qty, 'nearhaven') > 0) {
       addInv(b.inventory, opp.resource, -opp.qty);
-      b.caravan = { to: 'aurora', arriveTick: world.tick + TRAVEL_TICKS, cargo: { [opp.resource]: opp.qty }, costBasis: opp.cost };
+      payFreight('nearhaven', opp.to, opp.qty);
+      b.caravan = { to: opp.to, arriveTick: world.tick + travelTicks('nearhaven', opp.to), cargo: { [opp.resource]: opp.qty }, costBasis: opp.cost };
       pushFeed(world, { kind: 'opportunity', actor: p.id, text: `${b.name} dispatched a caravan of ${opp.qty} ${opp.resource} to ${world.markets[opp.to].name}.`, data: { expected: money(opp.expectedProfit) } });
     }
   }

@@ -1,4 +1,8 @@
 import {
+  MARKETS,
+  charterCity,
+  migrateWorld,
+  shipGoods,
   advanceWorld,
   buyBusiness,
   buyListing,
@@ -32,10 +36,11 @@ const resource = z.enum(['wheat', 'bread', 'wood', 'iron', 'coal', 'stone', 'too
 const id = z.string().min(1).max(64);
 const qty = z.number().int().min(1).max(500);
 const gold = z.number().positive().max(100000);
+const city = z.enum(MARKETS);
 
 /** Every player action is validated against this schema before it reaches the engine. */
 export const ActionSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('trade'), side: z.enum(['buy', 'sell']), resource, qty, market: z.enum(['nearhaven', 'aurora']).optional(), limitPrice: z.number().positive().optional() }),
+  z.object({ type: z.literal('trade'), side: z.enum(['buy', 'sell']), resource, qty, market: city.optional(), limitPrice: z.number().positive().optional() }),
   z.object({ type: z.literal('business.buy'), kind: z.enum(['farm', 'bakery', 'blacksmith', 'textile', 'warehouse', 'trading']) }),
   z.object({ type: z.literal('business.hire'), businessId: id }),
   z.object({ type: z.literal('business.fire'), businessId: id }),
@@ -56,6 +61,8 @@ export const ActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('listing.buy'), listingId: id }),
   z.object({ type: z.literal('deal'), merchantId: id, side: z.enum(['buy', 'sell']), resource, qty: z.number().int().min(1).max(200), unitPrice: gold }),
   z.object({ type: z.literal('mission.claim'), missionId: id }),
+  z.object({ type: z.literal('city.charter'), city }),
+  z.object({ type: z.literal('ship'), from: city, to: city, resource, qty }),
 ]);
 export type Action = z.infer<typeof ActionSchema>;
 
@@ -79,7 +86,9 @@ export class GameService {
   constructor(private store: Store, private opts: { seed: number; tickMs: number }) {}
 
   async init(): Promise<void> {
-    this.world = (await this.store.loadWorld()) ?? createWorld(this.opts.seed);
+    const saved = await this.store.loadWorld();
+    // Saves from before the multi-city world gain the new cities, depots and route state.
+    this.world = saved ? migrateWorld(saved) : createWorld(this.opts.seed);
     this.world.ledger = [];
     this.lastFeedId = this.world.feed.at(-1)?.id ?? 0;
   }
@@ -158,6 +167,12 @@ export class GameService {
     switch (action.type) {
       case 'trade':
         r = playerTrade(w, userId, action);
+        break;
+      case 'city.charter':
+        r = charterCity(w, userId, action.city);
+        break;
+      case 'ship':
+        r = shipGoods(w, userId, action);
         break;
       case 'business.buy':
         r = buyBusiness(w, userId, action.kind);

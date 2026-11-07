@@ -1,4 +1,5 @@
 import { ECONOMY, MARKET_DEFS, RESOURCE_DEFS, RESOURCES, type MarketId, type Resource } from './config';
+import { CITY_DEFS, initialStockFor } from './cities';
 import type { MarketState, Result, WorldState } from './types';
 import { clamp, fail, money, ok, resourceMap } from './internal';
 
@@ -26,7 +27,7 @@ export function createMarket(id: MarketId): MarketState {
     id,
     name: def.name,
     fee: def.fee,
-    stock: resourceMap((r) => RESOURCE_DEFS[r].initialStock[id]),
+    stock: resourceMap((r) => initialStockFor(id, r)),
     pressure: resourceMap(() => 1),
     price: zero(),
     openPrice: zero(),
@@ -43,7 +44,7 @@ export function createMarket(id: MarketId): MarketState {
     tickConsumed: zero(),
     tickShortage: zero(),
     volumeToday: 0,
-    treasury: 2000,
+    treasury: CITY_DEFS[id].treasury,
   };
   for (const r of RESOURCES) {
     m.price[r] = unitPrice(m, r, m.stock[r]);

@@ -120,7 +120,7 @@ export interface MerchantState {
   bankruptSince?: number;
   generation: number;
   location: MarketId;
-  travel?: { to: MarketId; arriveTick: number; cargo: Inventory; costBasis: number; expected?: number };
+  travel?: { to: MarketId; from?: MarketId; arriveTick: number; cargo: Inventory; costBasis: number; expected?: number };
   /** Trader memory: realised/expected revenue ratio per route, used to discount future forecasts. */
   routes: Record<string, number>;
   homeBuilding: string;
@@ -261,6 +261,23 @@ export interface PlayerState {
   credit: { repaid: number; defaults: number };
   history: { day: number; netWorth: number; gold: number }[];
   marketAccess: MarketId[];
+  /** Trading offices the player has opened in other cities (with a depot there). */
+  charters: MarketId[];
+  /** Goods held in other cities' depots. The home warehouse is `inventory` (Nearhaven). */
+  depots: Partial<Record<MarketId, Inventory>>;
+}
+
+/** Goods moving between two cities along the route network. */
+export interface Shipment {
+  id: string;
+  ownerId: string;
+  from: MarketId;
+  to: MarketId;
+  resource: Resource;
+  qty: number;
+  departTick: number;
+  arriveTick: number;
+  freight: number;
 }
 
 export interface ActiveEvent {
@@ -347,6 +364,9 @@ export interface WorldState {
     dayFoodSatisfaction: number;
     lastDayFoodSatisfaction: number;
   };
+  /** Per-city state beyond the exchange (population grows in later phases). */
+  cities: Record<MarketId, { population: number }>;
+  shipments: Record<string, Shipment>;
 }
 
 export type Result<T> = { ok: true; data: T } | { ok: false; error: string };

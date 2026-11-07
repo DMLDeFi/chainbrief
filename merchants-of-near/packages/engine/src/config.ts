@@ -18,7 +18,8 @@ export const RESOURCES = [
 ] as const;
 export type Resource = (typeof RESOURCES)[number];
 
-export const MARKETS = ['nearhaven', 'aurora'] as const;
+/** Every city with an exchange. Nearhaven is the starting home city. */
+export const MARKETS = ['nearhaven', 'aurora', 'kingsreach', 'emberforge', 'goldenvale', 'deepcrag'] as const;
 export type MarketId = (typeof MARKETS)[number];
 
 export interface ResourceDef {
@@ -30,7 +31,8 @@ export interface ResourceDef {
   /** How strongly price reacts to stock: price ∝ (ref/stock)^elasticity. */
   elasticity: number;
   /** Starting stock in each market. */
-  initialStock: Record<MarketId, number>;
+  /** Opening stock in the two original markets; other cities derive theirs from their regional profile. */
+  initialStock: Record<'nearhaven' | 'aurora', number>;
   category: 'raw' | 'food' | 'crafted';
   description: string;
 }
@@ -50,8 +52,12 @@ export const RESOURCE_DEFS: Record<Resource, ResourceDef> = {
 };
 
 export const MARKET_DEFS: Record<MarketId, { name: string; fee: number; description: string }> = {
-  nearhaven: { name: 'Nearhaven Exchange', fee: 0.03, description: 'The bustling central market of Nearhaven.' },
-  aurora: { name: 'Port Aurora', fee: 0.04, description: 'A distant sea port. Rich in fish, iron and cloth; hungry for bread and tools.' },
+  nearhaven: { name: 'Nearhaven Exchange', fee: 0.03, description: 'The Merchant City: a river crossroads of trading houses, guilds and the central exchange.' },
+  aurora: { name: 'Port Aurora', fee: 0.04, description: 'The Coastal Port: shipping, fisheries and imports from across the sea. Rich in fish, iron and cloth; hungry for bread and tools.' },
+  kingsreach: { name: 'Kingsreach Royal Market', fee: 0.035, description: 'The Royal Capital: the crown, the great banks and the richest households. Pays well for food, cloth, weapons and building stone.' },
+  emberforge: { name: 'Emberforge Works Exchange', fee: 0.03, description: 'The Industrial City: ironworks, mills and workshops. Turns iron, coal and wood into tools, weapons and cloth.' },
+  goldenvale: { name: 'Goldenvale Grain Hall', fee: 0.025, description: 'The Agricultural City: endless wheat fields, ranches and granaries. Cheap grain and livestock; short of tools and cloth.' },
+  deepcrag: { name: 'Deepcrag Ore Market', fee: 0.03, description: 'The Mining City: mines and quarries in the mountains. Iron, coal and stone flow out; food and tools must come in.' },
 };
 
 export const TIME = {

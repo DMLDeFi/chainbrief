@@ -1,4 +1,4 @@
-import { AURORA_FLOWS, CITIZEN_DEMAND, ECONOMY, MARKETS, RESOURCE_DEFS, RESOURCES, SEASONAL_DEMAND, TIME, type Resource } from './config';
+import { CITIZEN_DEMAND, ECONOMY, MARKETS, RESOURCE_DEFS, RESOURCES, SEASONAL_DEMAND, TIME, type Resource } from './config';
 import type { WorldState } from './types';
 import { clamp, dayOf, money, pct, pushFeed, resourceMap, seasonOf, fmt } from './internal';
 import { createMarket, unitPrice, updatePressure } from './market';
@@ -9,9 +9,11 @@ import { collectLoans } from './banking';
 import { playerDaily } from './players';
 import { evaluateProgression } from './progression';
 import { createMerchant, MERCHANT_SEEDS } from './seed';
+import { CITY_DEFS } from './cities';
+import { processShipments } from './logistics';
 
 export function createWorld(seed = 20260101): WorldState {
-  const markets = { nearhaven: createMarket('nearhaven'), aurora: createMarket('aurora') };
+  const markets = Object.fromEntries(MARKETS.map((id) => [id, createMarket(id)])) as WorldState['markets'];
   const merchants: WorldState['merchants'] = {};
   for (const s of MERCHANT_SEEDS) merchants[s.id] = createMerchant(s);
   const world: WorldState = {
@@ -36,10 +38,9 @@ export function createWorld(seed = 20260101): WorldState {
     plotsUsed: [],
     ledger: [],
     guildTreasury: 500,
-    reported: {
-      nearhaven: { price: { ...markets.nearhaven.price }, stock: { ...markets.nearhaven.stock } },
-      aurora: { price: { ...markets.aurora.price }, stock: { ...markets.aurora.stock } },
-    },
+    reported: Object.fromEntries(MARKETS.map((id) => [id, { price: { ...markets[id].price }, stock: { ...markets[id].stock } }])) as WorldState['reported'],
+    cities: Object.fromEntries(MARKETS.map((id) => [id, { population: CITY_DEFS[id].population }])) as WorldState['cities'],
+    shipments: {},
     stats: { dayFoodSatisfaction: 0, lastDayFoodSatisfaction: 1 },
   };
   for (const m of Object.values(merchants)) for (const r of RESOURCES) m.beliefs[r] = markets.nearhaven.price[r];
@@ -60,6 +61,10 @@ function citizensConsume(world: WorldState): void {
   // Nearhaven's exchange and its households share one town purse: wages and merchant
   // spending flow in, payments for goods sold to the exchange flow out.
   m.treasury = money(m.treasury + world.population * ECONOMY.citizenIncome);
+  // Households save, pay taxes and spend beyond the map: above a comfortable level the
+  // town purse leaks 1% of the excess each hour, so outside income cannot inflate it forever.
+  const comfortable = 3000 + world.population * 6;
+  if (m.treasury > comfortable) m.treasury = money(m.treasury - (m.treasury - comfortable) * 0.01);
   let wantedFood = 0;
   let gotFood = 0;
   for (const r of CITIZEN_PRIORITY) {
@@ -83,12 +88,25 @@ function citizensConsume(world: WorldState): void {
   world.stats.dayFoodSatisfaction += wantedFood > 0 ? Math.min(1, gotFood / wantedFood) : 1;
 }
 
-/** Port Aurora's hinterland produces and consumes on its own schedule. */
+/**
+ * Every other city's hinterland produces and consumes on its own schedule:
+ * Goldenvale grows grain, Deepcrag digs ore, Emberforge works metal and
+ * Kingsreach consumes. Harvests, weather and events shift their output too.
+ */
+const SEASONAL_RAW = new Set<Resource>(['wheat', 'fish', 'livestock', 'wood', 'iron', 'coal', 'stone']);
 function regionFlows(world: WorldState): void {
-  const m = world.markets.aurora;
+  for (const id of MARKETS) {
+    const def = CITY_DEFS[id];
+    if (id === 'nearhaven') continue;
+    regionFlow(world, id, def.flows);
+  }
+}
+function regionFlow(world: WorldState, id: (typeof MARKETS)[number], flows: (typeof CITY_DEFS)['aurora']['flows']): void {
+  const m = world.markets[id];
   for (const r of RESOURCES) {
-    const f = AURORA_FLOWS[r];
-    const produced = f.produce * (r === 'fish' ? productionFactor(world, 'fish') : 1);
+    const f = flows[r];
+    if (!f) continue;
+    const produced = f.produce * (SEASONAL_RAW.has(r) ? productionFactor(world, r) : 1);
     m.stock[r] = Math.round((m.stock[r] + produced) * 100) / 100;
     m.tickProduced[r] += produced;
     const want = f.consume * Math.pow(RESOURCE_DEFS[r].basePrice / m.price[r], ECONOMY.citizenElasticity);
@@ -98,6 +116,11 @@ function regionFlows(world: WorldState): void {
     m.treasury = money(m.treasury + take * m.price[r]); // the hinterland pays for what it imports
     if (want - take > f.consume * 0.25) m.tickShortage[r] += want - take;
   }
+  // A regional economy is not a closed vault: above twice its normal purse, coin
+  // leaves through taxes, savings and trade beyond the map, so the hinterland's
+  // spending cannot inflate the whole world.
+  const target = CITY_DEFS[id].treasury * 2;
+  if (m.treasury > target) m.treasury = money(m.treasury - (m.treasury - target) * 0.01);
 }
 
 /** Report significant price moves to the activity feed, explained by the underlying state change. */
@@ -206,6 +229,7 @@ export function stepWorld(world: WorldState): void {
   updateWeather(world);
   citizensConsume(world);
   regionFlows(world);
+  processShipments(world);
   runMerchants(world);
   for (const b of Object.values(world.businesses)) runBusiness(world, b);
   for (const id of MARKETS) updatePressure(world.markets[id], id === 'nearhaven' ? Object.fromEntries((Object.keys(CITIZEN_DEMAND) as Resource[]).map((r) => [r, citizenBaseDemand(world, r)])) : {});
