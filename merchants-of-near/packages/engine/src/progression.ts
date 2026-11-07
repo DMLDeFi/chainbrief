@@ -9,6 +9,8 @@ export interface LevelDef {
   netWorth: number;
   businesses: number;
   reputation: number;
+  /** Cities where the player runs at least one business (from rank 7). */
+  cities?: number;
   unlocks: string[];
 }
 
@@ -17,11 +19,32 @@ export const LEVELS: LevelDef[] = [
   { level: 2, title: 'Market Merchant', xp: 120, netWorth: 220, businesses: 0, reputation: 0, unlocks: ['Bakery', 'Textile Shop', 'Player marketplace listings', 'Merchant investment'] },
   { level: 3, title: 'Business Owner', xp: 350, netWorth: 450, businesses: 1, reputation: 15, unlocks: ['Blacksmith', 'Private deals with merchants'] },
   { level: 4, title: 'Wealthy Trader', xp: 800, netWorth: 1100, businesses: 2, reputation: 25, unlocks: ['Trading Company', 'Port Aurora market'] },
-  { level: 5, title: 'Trade Magnate', xp: 1800, netWorth: 3000, businesses: 3, reputation: 40, unlocks: ['Larger loans'] },
-  { level: 6, title: 'Master Merchant', xp: 3500, netWorth: 8000, businesses: 4, reputation: 60, unlocks: ['Master Merchant deed on NEAR'] },
+  { level: 5, title: 'Trade Magnate', xp: 1800, netWorth: 3000, businesses: 3, reputation: 40, unlocks: ['Larger loans', 'Level 5 businesses', 'A first subsidiary company'] },
+  { level: 6, title: 'Master Merchant', xp: 3500, netWorth: 8000, businesses: 4, reputation: 60, unlocks: ['Master Merchant deed on NEAR', 'Acquisitions of other owners’ businesses'] },
+  { level: 7, title: 'Industrialist', xp: 6000, netWorth: 20000, businesses: 6, reputation: 68, cities: 3, unlocks: ['Three subsidiary companies', 'Bank'] },
+  { level: 8, title: 'Regional Tycoon', xp: 10000, netWorth: 50000, businesses: 9, reputation: 76, cities: 4, unlocks: ['Five subsidiary companies'] },
+  { level: 9, title: 'Merchant Prince', xp: 16000, netWorth: 120000, businesses: 13, reputation: 84, cities: 5, unlocks: ['Seven subsidiary companies'] },
+  { level: 10, title: 'Economic Powerhouse', xp: 25000, netWorth: 300000, businesses: 18, reputation: 92, cities: 6, unlocks: ['Ten subsidiary companies', 'Powerhouse tiers beyond'] },
 ];
+export const MAX_LEVEL = LEVELS.length;
 
-export const levelTitle = (level: number) => LEVELS[clamp(level, 1, 6) - 1].title;
+export const levelTitle = (level: number) => LEVELS[clamp(level, 1, MAX_LEVEL) - 1].title;
+
+/**
+ * Beyond the top rank there is no ceiling: every doubling of net worth past
+ * the Powerhouse threshold adds a tier (Economic Powerhouse II, III, …).
+ */
+export function powerhouseTier(p: PlayerState, netWorth: number): number {
+  if (p.level < MAX_LEVEL) return 0;
+  return 1 + Math.max(0, Math.floor(Math.log2(netWorth / LEVELS[MAX_LEVEL - 1].netWorth)));
+}
+const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+export const rankTitle = (p: PlayerState, netWorth: number) => {
+  const t = powerhouseTier(p, netWorth);
+  return t > 1 ? `${levelTitle(p.level)} ${ROMAN[Math.min(10, t)] ?? t}` : levelTitle(p.level);
+};
+/** Cities where the player runs at least one business. */
+export const citiesWithBusiness = (world: WorldState, p: PlayerState) => new Set(Object.values(world.businesses).filter((b) => b.ownerId === p.id).map((b) => b.city ?? 'nearhaven')).size;
 
 export interface AchievementDef {
   id: string;
@@ -48,6 +71,12 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'networth_5000', title: 'Merchant Prince', description: 'Reach a net worth of 5,000 gold.', xp: 200, check: (w, p) => playerNetWorth(w, p) >= 5000 },
   { id: 'caravan', title: 'Caravan Master', description: 'Found a trading company.', xp: 80, check: (w, p) => owned(w, p).some((b) => b.kind === 'trading') },
   { id: 'master', title: 'Master Merchant', description: 'Reach level 6.', xp: 0, check: (_w, p) => p.level >= 6 },
+  { id: 'realm', title: 'Across the Realm', description: 'Run businesses in three cities.', xp: 120, check: (w, p) => citiesWithBusiness(w, p) >= 3 },
+  { id: 'everywhere', title: 'A Business in Every City', description: 'Run businesses in all six cities.', xp: 300, check: (w, p) => citiesWithBusiness(w, p) >= 6 },
+  { id: 'patron', title: 'Patron of the Arts and Roads', description: 'Give 1,000 gold to public works.', xp: 150, check: (_w, p) => Object.values(p.patronage ?? {}).reduce((s, x) => s + (x ?? 0), 0) >= 1000 },
+  { id: 'holding', title: 'Holding Company', description: 'Found a subsidiary company.', xp: 120, check: (_w, p) => (p.companies?.length ?? 0) >= 1 },
+  { id: 'acquirer', title: 'Takeover', description: 'Acquire another owner’s business.', xp: 150, check: (_w, p) => (p.lifetime.acquisitions ?? 0) >= 1 },
+  { id: 'powerhouse', title: 'Economic Powerhouse', description: 'Reach rank 10.', xp: 0, check: (_w, p) => p.level >= 10 },
 ];
 
 const DAILY_POOL: Array<Omit<MissionDef, 'id'>> = [
@@ -146,10 +175,11 @@ export function evaluateProgression(world: WorldState, p: PlayerState): Progress
   }
   const nw = playerNetWorth(world, p);
   const biz = owned(world, p).length;
+  const cities = citiesWithBusiness(world, p);
   let level = p.level;
-  while (level < 6) {
+  while (level < MAX_LEVEL) {
     const next = LEVELS[level];
-    if (p.xp >= next.xp && nw >= next.netWorth && biz >= next.businesses && p.reputation >= next.reputation) level += 1;
+    if (p.xp >= next.xp && nw >= next.netWorth && biz >= next.businesses && p.reputation >= next.reputation && cities >= (next.cities ?? 0)) level += 1;
     else break;
   }
   if (level > p.level) {
@@ -162,5 +192,5 @@ export function evaluateProgression(world: WorldState, p: PlayerState): Progress
 }
 
 export function nextLevelRequirements(p: PlayerState): LevelDef | null {
-  return p.level >= 6 ? null : LEVELS[p.level];
+  return p.level >= MAX_LEVEL ? null : LEVELS[p.level];
 }

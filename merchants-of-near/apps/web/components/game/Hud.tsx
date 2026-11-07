@@ -43,7 +43,7 @@ export function Hud({ world, me, onOpen, connected }: { world: PublicSnapshot; m
         <button className="text-left" onClick={() => onOpen('achievements')}>
           <div className="flex items-center gap-2">
             <span className="display max-w-[110px] truncate text-sm font-bold sm:max-w-none">{p.name}</span>
-            <span className="whitespace-nowrap rounded-md bg-brass/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brass">Lv {p.level}<span className="max-sm:hidden"> · {p.levelTitle}</span></span>
+            <span className="whitespace-nowrap rounded-md bg-brass/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brass">Lv {p.level}<span className="max-sm:hidden"> · {p.rankTitle ?? p.levelTitle}</span></span>
           </div>
           <div className="mt-1 flex items-center gap-2">
             <div className="h-1.5 w-36 overflow-hidden rounded-full bg-black/50 max-sm:w-16">

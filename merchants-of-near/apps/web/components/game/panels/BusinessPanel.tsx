@@ -311,6 +311,8 @@ function Detail({ b, me, world }: { b: OwnedBiz; me: Me; world: PublicSnapshot }
         </div>
       </div>
       {b.kind === 'shop' && <ShopBox b={b} world={world} />}
+      {b.kind === 'bank' && <BankBox b={b} />}
+      {b.idle === 'no-land' && <p className="rounded-lg border border-ember/40 bg-ember/10 px-3 py-2 text-xs text-[#f0b8a0]">No rent: you own no vacant land in {CITY_DEFS[b.city].name}. Buy plots in the Land &amp; property tab and this agency lets them out at 2% of their value a day.</p>}
       <SellBox b={b} />
       <div className="rounded-xl border border-near/30 bg-near/5 p-4">
         <div className="flex items-center justify-between gap-3">
@@ -372,6 +374,24 @@ function ShopBox({ b, world }: { b: OwnedBiz; world: PublicSnapshot }) {
         <span className="text-muted">Restocks from your {CITY_DEFS[b.city].name} {b.city === 'nearhaven' ? 'warehouse' : 'depot'} and sells over the counter for the exchange price plus {Math.round((0.12 + 0.02 * (b.level - 1)) * 100)}% paid by households. Ship goods in with a standing order (Inventory panel).</span>
       </div>
       {b.idle === 'no-inputs' && <p className="mt-2 text-ember">Nothing to sell: your store here has none of this good.</p>}
+    </div>
+  );
+}
+
+function BankBox({ b }: { b: OwnedBiz }) {
+  const { run, busy } = useAction();
+  const [amt, setAmt] = useState(1000);
+  const capital = b.capital ?? 0;
+  return (
+    <div className="panel p-4 text-xs">
+      <div className="label mb-2">Capital · {gold(capital)} / {gold(b.capacity)}g</div>
+      <p className="mb-2 text-muted">Deposited capital is lent to {CITY_DEFS[b.city].name}’s households and traders. It earns about 0.4% a day (more in a big city, with more clerks and a higher level), paid from the city’s purse. When food is dear, some loans go bad. Capital counts in full towards your net worth and is returned to you if you sell the bank.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input className="input num !w-28 !py-1" type="number" min={1} value={amt} onChange={(e) => setAmt(Number(e.target.value))} aria-label="Amount" />
+        <button disabled={busy || amt < 1} onClick={() => run({ type: 'bank.deposit', businessId: b.id, amount: Math.round(amt) }, 'Capital deposited')} className="btn btn-gold px-3 py-1">Deposit</button>
+        <button disabled={busy || amt < 1 || capital < amt} onClick={() => run({ type: 'bank.deposit', businessId: b.id, amount: -Math.round(amt) }, 'Capital withdrawn')} className="btn btn-ghost px-3 py-1">Withdraw</button>
+      </div>
+      {b.idle === 'no-capital' && <p className="mt-2 text-ember">No capital deposited: the bank earns nothing.</p>}
     </div>
   );
 }

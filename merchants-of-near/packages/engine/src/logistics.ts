@@ -192,6 +192,7 @@ export function migrateWorld(world: WorldState): WorldState {
     c.growth ??= 0; c.popHistory ??= []; c.infra ??= {}; c.projects ??= {};
   }
   world.shipments ??= {};
+  world.offers ??= {};
   // Land: every existing business stood in Nearhaven, on the plots in plotsUsed.
   if (!world.landUse) {
     world.landUse = Object.fromEntries(MARKETS.map((id) => [id, [] as number[]])) as WorldState['landUse'];

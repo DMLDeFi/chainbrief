@@ -7,7 +7,8 @@ import { merchantNetWorth, playerNetWorth, shareValue, debtOf } from './valuatio
 import { BUSINESS_DEFS, businessCapacity, businessMaxWorkers, businessQuote, businessSaleValue, MAX_BUSINESS_LEVEL, overheadFactor, playerCapacity, UPGRADE_LEVEL_REQ, upgradeCostOf } from './businesses';
 import { cityPopulation, growthFactors, INFRA, INFRA_KINDS, infraCost, laborEmployed, laborSupply, MAX_INFRA, patronTitle, populationCap, wageFactor, type GrowthFactors, type InfraKind } from './civic';
 import { affinity, plotCount, LAND_TAX, landDef, landPrice, landValue, plotsTaken, prosperity } from './property';
-import { LEVELS, levelTitle, nextLevelRequirements, ACHIEVEMENTS } from './progression';
+import { LEVELS, levelTitle, nextLevelRequirements, ACHIEVEMENTS, rankTitle, powerhouseTier, citiesWithBusiness } from './progression';
+import { companyReport, maxSubsidiaries } from './corporate';
 import { warehouseExpansionCost } from './players';
 import { activeLoansOf, evaluateCredit } from './banking';
 
@@ -83,7 +84,7 @@ export function publicSnapshot(world: WorldState, feedSince = 0) {
       lastDecision: m.decisions[m.decisions.length - 1] ?? null,
       lastTradeTick: m.memory.length ? m.memory[m.memory.length - 1].tick : -1,
     })),
-    businesses: Object.values(world.businesses).map((b) => ({ id: b.id, kind: b.kind, city: b.city ?? 'nearhaven', plot: b.plot, level: b.level, workers: b.workers, owner: world.players[b.ownerId]?.name ?? '?', ownerId: b.ownerId })),
+    businesses: Object.values(world.businesses).map((b) => ({ id: b.id, name: b.name, deeded: !!b.deedTokenId, value: businessSaleValue(world, b).total, kind: b.kind, city: b.city ?? 'nearhaven', plot: b.plot, level: b.level, workers: b.workers, owner: world.players[b.ownerId]?.name ?? '?', ownerId: b.ownerId })),
     /** Vacant plots players hold as property (drawn as fenced, sold plots in town). */
     land: Object.values(world.players).flatMap((p) => (p.land ?? []).map((l) => ({ city: l.city, plot: l.plot, owner: p.name, ownerId: p.id }))),
     /** Land market in each city. */
@@ -170,6 +171,14 @@ export function playerView(world: WorldState, playerId: string) {
     land: (p.land ?? []).map((l) => ({ ...l, value: landValue(world, l.city), tax: money(landValue(world, l.city) * LAND_TAX) })),
     taxArrears: money(p.taxArrears ?? 0),
     patronage: p.patronage ?? {},
+    rankTitle: rankTitle(p, playerNetWorth(world, p)),
+    powerhouseTier: powerhouseTier(p, playerNetWorth(world, p)),
+    citiesWithBusiness: citiesWithBusiness(world, p),
+    company: companyReport(world, playerId),
+    companies: p.companies ?? [],
+    subsidiaryLimit: maxSubsidiaries(p),
+    offersMade: Object.values(world.offers ?? {}).filter((o) => o.buyerId === playerId).map((o) => ({ ...o, business: world.businesses[o.businessId]?.name ?? '?', seller: world.players[o.sellerId]?.name ?? '?' })),
+    offersReceived: Object.values(world.offers ?? {}).filter((o) => o.sellerId === playerId).map((o) => ({ ...o, business: world.businesses[o.businessId]?.name ?? '?', buyer: world.players[o.buyerId]?.name ?? '?', value: world.businesses[o.businessId] ? businessSaleValue(world, world.businesses[o.businessId]).total : 0 })),
     patronTitle: patronTitle(p),
     overhead: overheadFactor(world, playerId),
     /** Building quotes for every kind in every city the player can build in. */

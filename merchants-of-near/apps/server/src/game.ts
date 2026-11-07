@@ -1,5 +1,13 @@
 import {
   addRoute,
+  assignBusiness,
+  bankDeposit,
+  cancelOffer,
+  dissolveSubsidiary,
+  foundSubsidiary,
+  makeOffer,
+  respondToOffer,
+  setCompanyName,
   fundProject,
   INFRA_KINDS,
   type InfraKind,
@@ -56,6 +64,14 @@ export const ActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('business.buy'), kind: z.enum(Object.keys(BUSINESS_DEFS) as [BusinessKind, ...BusinessKind[]]), city: city.optional() }),
   z.object({ type: z.literal('route.add'), from: city, to: city, resource, batch: z.number().int().min(5).max(500), keep: z.number().int().min(0).max(5000).optional() }),
   z.object({ type: z.literal('route.remove'), routeId: id }),
+  z.object({ type: z.literal('company.name'), name: z.string().min(3).max(32) }),
+  z.object({ type: z.literal('company.found'), name: z.string().min(3).max(32) }),
+  z.object({ type: z.literal('company.dissolve'), companyId: id }),
+  z.object({ type: z.literal('company.assign'), businessId: id, companyId: id.nullable() }),
+  z.object({ type: z.literal('offer.make'), businessId: id, price: z.number().int().min(10).max(1_000_000) }),
+  z.object({ type: z.literal('offer.respond'), offerId: id, accept: z.boolean() }),
+  z.object({ type: z.literal('offer.cancel'), offerId: id }),
+  z.object({ type: z.literal('bank.deposit'), businessId: id, amount: z.number().int().min(-1_000_000).max(1_000_000) }),
   z.object({ type: z.literal('city.fund'), city, project: z.enum(INFRA_KINDS as [InfraKind, ...InfraKind[]]), amount: z.number().int().min(10).max(100000) }),
   z.object({ type: z.literal('route.toggle'), routeId: id, active: z.boolean() }),
   z.object({ type: z.literal('business.sell'), businessId: id }),
@@ -195,6 +211,30 @@ export class GameService {
         break;
       case 'business.buy':
         r = buyBusiness(w, userId, action.kind, action.city ?? 'nearhaven');
+        break;
+      case 'company.name':
+        r = setCompanyName(w, userId, action.name);
+        break;
+      case 'company.found':
+        r = foundSubsidiary(w, userId, action.name);
+        break;
+      case 'company.dissolve':
+        r = dissolveSubsidiary(w, userId, action.companyId);
+        break;
+      case 'company.assign':
+        r = assignBusiness(w, userId, action.businessId, action.companyId);
+        break;
+      case 'offer.make':
+        r = makeOffer(w, userId, action);
+        break;
+      case 'offer.respond':
+        r = respondToOffer(w, userId, action.offerId, action.accept);
+        break;
+      case 'offer.cancel':
+        r = cancelOffer(w, userId, action.offerId);
+        break;
+      case 'bank.deposit':
+        r = bankDeposit(w, userId, action.businessId, action.amount);
         break;
       case 'city.fund':
         r = fundProject(w, userId, action);

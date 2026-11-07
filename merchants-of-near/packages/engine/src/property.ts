@@ -32,12 +32,12 @@ export const landDef = (city: MarketId) => LAND[CITY_DEFS[city].archetype];
 /** How well each kind of business suits a city: a multiplier on output (or caravan capacity / storage). */
 /** 0 means the trade cannot be set up there at all (no water for a fishery, no ore for a mine). */
 export const AFFINITY: Record<CityArchetype, Partial<Record<BusinessKind, number>>> = {
-  merchant: { trading: 1.1, warehouse: 1.1, shop: 1.1, mine: 0.7, quarry: 0.8 },
-  capital: { bakery: 1.15, trading: 1.15, farm: 0.6, blacksmith: 1.05, ranch: 0.6, lumbercamp: 0.6, mine: 0, quarry: 0.7, shop: 1.3, carpenter: 1.1, brewery: 1.1 },
-  port: { trading: 1.25, warehouse: 1.2, farm: 0.8, fishery: 1.4, sawmill: 1.1, mine: 0, shop: 1.1 },
+  merchant: { trading: 1.1, warehouse: 1.1, shop: 1.1, mine: 0.7, quarry: 0.8, bank: 1.15, estate: 1.1 },
+  capital: { bank: 1.3, estate: 1.2, bakery: 1.15, trading: 1.15, farm: 0.6, blacksmith: 1.05, ranch: 0.6, lumbercamp: 0.6, mine: 0, quarry: 0.7, shop: 1.3, carpenter: 1.1, brewery: 1.1 },
+  port: { bank: 1.1, trading: 1.25, warehouse: 1.2, farm: 0.8, fishery: 1.4, sawmill: 1.1, mine: 0, shop: 1.1 },
   industrial: { blacksmith: 1.3, textile: 1.2, farm: 0.7, foundry: 1.3, sawmill: 1.2, carpenter: 1.2, mine: 0.8, fishery: 0, ranch: 0.7 },
-  agricultural: { farm: 1.35, bakery: 1.1, blacksmith: 0.8, ranch: 1.35, mill: 1.3, brewery: 1.25, fishery: 0.8, mine: 0, quarry: 0, foundry: 0.7 },
-  mining: { blacksmith: 1.15, farm: 0.55, textile: 0.8, mine: 1.45, quarry: 1.35, lumbercamp: 1.2, foundry: 1.15, fishery: 0, ranch: 0.6, mill: 0.8 },
+  agricultural: { estate: 0.9, bank: 0.85, farm: 1.35, bakery: 1.1, blacksmith: 0.8, ranch: 1.35, mill: 1.3, brewery: 1.25, fishery: 0.8, mine: 0, quarry: 0, foundry: 0.7 },
+  mining: { bank: 0.8, blacksmith: 1.15, farm: 0.55, textile: 0.8, mine: 1.45, quarry: 1.35, lumbercamp: 1.2, foundry: 1.15, fishery: 0, ranch: 0.6, mill: 0.8 },
 };
 export const affinity = (city: MarketId, kind: BusinessKind) => AFFINITY[CITY_DEFS[city].archetype][kind] ?? 1;
 

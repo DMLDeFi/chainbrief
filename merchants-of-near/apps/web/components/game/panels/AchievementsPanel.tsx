@@ -67,6 +67,7 @@ export function AchievementsPanel({ me, onClose }: { me: Me; onClose: () => void
                     <Req label="XP" have={p.xp} need={l.xp} />
                     <Req label="Net worth" have={p.netWorth} need={l.netWorth} />
                     <Req label="Businesses" have={p.businesses.length} need={l.businesses} />
+                    {l.cities ? <Req label="Cities" have={p.citiesWithBusiness} need={l.cities} /> : null}
                     <Req label="Reputation" have={p.reputation} need={l.reputation} />
                   </div>
                 )}

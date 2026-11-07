@@ -15,11 +15,11 @@ const rich = (gold = 30000) => {
 const bizSales = (w: WorldState, id: string) => w.ledger.filter((e) => (e.details as { businessId?: string } | undefined)?.businessId === id);
 
 describe('industries', () => {
-  it('groups all seventeen kinds of business into industries', () => {
+  it('groups all nineteen kinds of business into industries', () => {
     const kinds = Object.keys(BUSINESS_DEFS) as BusinessKind[];
-    expect(kinds).toHaveLength(17);
+    expect(kinds).toHaveLength(19);
     for (const k of kinds) expect(BUSINESS_DEFS[k].industry).toBe(INDUSTRY_OF[k]);
-    expect(new Set(kinds.map((k) => INDUSTRY_OF[k]))).toEqual(new Set(['agriculture', 'resources', 'food', 'manufacturing', 'retail', 'logistics']));
+    expect(new Set(kinds.map((k) => INDUSTRY_OF[k]))).toEqual(new Set(['agriculture', 'resources', 'food', 'manufacturing', 'retail', 'finance', 'property', 'logistics']));
   });
 
   it('lets every processed good be made from goods that exist', () => {

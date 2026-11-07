@@ -1,6 +1,7 @@
 import { ECONOMY, MARKETS, RESOURCE_DEFS, RESOURCES, type MarketId, type Recipe, type Resource } from './config';
 import { freightCost, travelTicks } from './cities';
 import { CITY_DEFS } from './cities';
+import { financeDaily } from './corporate';
 import { civicBoost, freightFor, laborEmployed, laborSupply, wageFactor } from './civic';
 import { depotCapacity, hasAccess, isCity, storeFor } from './logistics';
 import { affinity, plotCount, freePlot, landDef, landPrice, landValue, plotsTaken, releasePlot, starterGrant, takePlot } from './property';
@@ -157,6 +158,19 @@ export const BUSINESS_DEFS: Record<BusinessKind, BusinessDef> = {
     recipes: [],
     wage: 5, upkeep: 3, maxWorkers: [1, 2, 3, 4, 5], capacity: [40, 80, 130, 190, 260], efficiency: [1, 1.15, 1.3, 1.45, 1.6], upgradeCost: [220, 460, 860, 1500],
   },
+  // ---- Finance & property
+  bank: {
+  kind: 'bank', name: 'Bank', description: 'Lends your deposited capital to the city’s households and traders for a daily yield. Hard times bring bad debts.',
+  price: 900, requiredLevel: 7,
+  recipes: [],
+  wage: 7, upkeep: 6, maxWorkers: [1, 2, 3, 4, 5], capacity: [2000, 5000, 12000, 25000, 50000], efficiency: [1, 1.1, 1.2, 1.3, 1.4], upgradeCost: [800, 1600, 3000, 5200],
+},
+  estate: {
+  kind: 'estate', name: 'Estate Agency', description: 'Lets out the vacant land you own in its city to tenants and stallholders, earning rent that more than covers the land tax.',
+  price: 350, requiredLevel: 3,
+  recipes: [],
+  wage: 5, upkeep: 3, maxWorkers: [1, 2, 3, 4, 5], capacity: [0, 0, 0, 0, 0], efficiency: [1, 1.15, 1.3, 1.45, 1.6], upgradeCost: [300, 650, 1200, 2100],
+},
 };
 
 export const INDUSTRY_OF: Record<BusinessKind, Industry> = {
@@ -165,12 +179,13 @@ export const INDUSTRY_OF: Record<BusinessKind, Industry> = {
   bakery: 'food', mill: 'food', brewery: 'food',
   blacksmith: 'manufacturing', textile: 'manufacturing', sawmill: 'manufacturing', foundry: 'manufacturing', carpenter: 'manufacturing',
   shop: 'retail',
+  bank: 'finance', estate: 'property',
   warehouse: 'logistics', trading: 'logistics',
 };
 for (const k of Object.keys(BUSINESS_DEFS) as BusinessKind[]) BUSINESS_DEFS[k].industry = INDUSTRY_OF[k];
 export const INDUSTRIES: Array<{ id: Industry; label: string }> = [
   { id: 'agriculture', label: 'Agriculture' }, { id: 'resources', label: 'Resources' }, { id: 'food', label: 'Food & drink' },
-  { id: 'manufacturing', label: 'Manufacturing' }, { id: 'retail', label: 'Retail' }, { id: 'logistics', label: 'Logistics' },
+  { id: 'manufacturing', label: 'Manufacturing' }, { id: 'retail', label: 'Retail' }, { id: 'finance', label: 'Finance' }, { id: 'property', label: 'Property' }, { id: 'logistics', label: 'Logistics' },
 ];
 
 export const businessCapacity = (b: Business) => BUSINESS_DEFS[b.kind].capacity[b.level - 1];
@@ -185,8 +200,9 @@ export function warehouseBonus(world: WorldState, playerId: string, city: Market
 }
 
 /** Coordination overhead: every business beyond the third makes running each one a little dearer. */
-export function overheadFactor(world: WorldState, playerId: string): number {
-  const n = Object.values(world.businesses).filter((b) => b.ownerId === playerId).length;
+export function overheadFactor(world: WorldState, playerId: string, companyId?: string): number {
+  // Coordination costs grow within each company: subsidiaries are run separately.
+  const n = Object.values(world.businesses).filter((b) => b.ownerId === playerId && (b.companyId ?? undefined) === (companyId ?? undefined)).length;
   return 1 + 0.06 * Math.max(0, n - 3);
 }
 /** Building cost of a business of this kind in that city. */
@@ -288,6 +304,8 @@ export function sellBusiness(world: WorldState, playerId: string, businessId: st
   if (price <= 0) return fail(`Nobody in ${CITY_DEFS[city].name} can afford it right now`);
   const store = storeFor(p, city);
   for (const [res, q] of Object.entries(b.inventory) as Array<[Resource, number]>) if (q >= 1) addInv(store, res, Math.floor(q));
+  // A bank's deposited capital is the owner's: it is paid back in full, not sold.
+  if (b.capital) { p.gold = money(p.gold + b.capital); b.capital = 0; }
   m.treasury = money(m.treasury - price);
   p.gold = money(p.gold + price);
   releasePlot(world, city, b.plot);
@@ -658,7 +676,8 @@ export function businessDaily(world: WorldState, b: Business): void {
   const def = BUSINESS_DEFS[b.kind];
   const city: MarketId = b.city ?? 'nearhaven';
   // Staff are paid local wages; upkeep grows with the size of the whole company.
-  let cost = money(def.wage * landDef(city).wages * wageFactor(world, city) * b.workers + def.upkeep * b.level * overheadFactor(world, p.id));
+  let cost = money(def.wage * landDef(city).wages * wageFactor(world, city) * b.workers + def.upkeep * b.level * overheadFactor(world, p.id, b.companyId));
+  if (b.kind === 'bank' || b.kind === 'estate') financeDaily(world, b);
   if (b.kind === 'warehouse') {
     // Merchants rent space when the market is glutted: rent scales with total market overstock.
     const m = world.markets[city];

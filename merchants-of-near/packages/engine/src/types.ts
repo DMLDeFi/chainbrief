@@ -145,6 +145,23 @@ export interface CityState {
   projects: Partial<Record<'roads' | 'granary' | 'markethall' | 'housing' | 'workshops', { funded: number; contributors: Record<string, number> }>>;
 }
 
+export interface Subsidiary {
+  id: string;
+  name: string;
+  foundedTick: number;
+}
+
+/** An offer to buy another owner's business; the buyer's gold is held in escrow until it is settled. */
+export interface AcquisitionOffer {
+  id: string;
+  businessId: string;
+  buyerId: string;
+  sellerId: string;
+  price: number;
+  tick: number;
+  expiresTick: number;
+}
+
 export interface TradeRoute {
   id: string;
   from: MarketId;
@@ -171,8 +188,9 @@ export type BusinessKind =
   | 'bakery' | 'mill' | 'brewery'
   | 'blacksmith' | 'textile' | 'sawmill' | 'foundry' | 'carpenter'
   | 'shop'
+  | 'bank' | 'estate'
   | 'warehouse' | 'trading';
-export type Industry = 'agriculture' | 'resources' | 'food' | 'manufacturing' | 'retail' | 'logistics';
+export type Industry = 'agriculture' | 'resources' | 'food' | 'manufacturing' | 'retail' | 'finance' | 'property' | 'logistics';
 
 export interface BusinessDaily {
   day: number;
@@ -222,8 +240,12 @@ export interface Business {
   landCost?: number;
   /** Built on the guild's free starter plot (no land tax, no land to sell). */
   starterGrant?: boolean;
+  /** Subsidiary company this business belongs to (none: held by the parent company). */
+  companyId?: string;
+  /** Capital deposited in a bank. */
+  capital?: number;
   /** Why production is paused, for the owner's dashboard. */
-  idle?: 'inputs-too-dear' | 'no-inputs' | 'full' | 'store-full' | null;
+  idle?: 'inputs-too-dear' | 'no-inputs' | 'full' | 'store-full' | 'no-capital' | 'no-land' | null;
   /** Trading company caravan state. */
   caravan?: { to: MarketId; arriveTick: number; cargo: Inventory; costBasis: number };
 }
@@ -303,7 +325,11 @@ export interface PlayerState {
   /** Counters reset daily/weekly for missions. */
   dayCounters: Partial<Record<MetricKey, number>>;
   weekCounters: Partial<Record<MetricKey, number>>;
-  lifetime: Partial<Record<MetricKey, number>> & { realizedProfit?: number };
+  lifetime: Partial<Record<MetricKey, number>> & { realizedProfit?: number; acquisitions?: number };
+  /** Name of the player's parent company. */
+  companyName?: string;
+  /** Subsidiary companies the player has founded. */
+  companies?: Subsidiary[];
   daily: MissionProgress[];
   weekly: MissionProgress[];
   missionDay: number;
@@ -429,6 +455,8 @@ export interface WorldState {
   /** Per-city state beyond the exchange: people, public works and their history. */
   cities: Record<MarketId, CityState>;
   shipments: Record<string, Shipment>;
+  /** Open acquisition offers between players. */
+  offers: Record<string, AcquisitionOffer>;
 }
 
 export type Result<T> = { ok: true; data: T } | { ok: false; error: string };

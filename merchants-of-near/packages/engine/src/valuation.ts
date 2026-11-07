@@ -35,7 +35,7 @@ export function businessValue(world: WorldState, playerId: string): number {
   let v = 0;
   for (const b of Object.values(world.businesses)) {
     if (b.ownerId !== playerId) continue;
-    v += businessSaleValue(world, b).total + inventoryValue(world, b.inventory, b.city ?? 'nearhaven');
+    v += businessSaleValue(world, b).total + inventoryValue(world, b.inventory, b.city ?? 'nearhaven') + (b.capital ?? 0);
     if (b.caravan) v += inventoryValue(world, b.caravan.cargo);
   }
   return money(v);

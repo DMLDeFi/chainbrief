@@ -230,6 +230,37 @@ describe('authoritative actions', () => {
     expect(me.player.patronage.goldenvale).toBe(250);
   });
 
+  it('runs subsidiaries, acquisitions between players and banks through the API', async () => {
+    const a = await register('tycoon', 'Ada Tycoon');
+    const b = await register('owner', 'Ben Owner');
+    const meA = (await ctx.app.inject({ method: 'GET', url: '/api/me', headers: { cookie: a.cookie } })).json();
+    const meB = (await ctx.app.inject({ method: 'GET', url: '/api/me', headers: { cookie: b.cookie } })).json();
+    Object.assign(ctx.game.world.players[meA.player.id], { gold: 30000, level: 7 });
+    expect((await act(a.cookie, { type: 'company.name', name: 'Tycoon Holdings' })).statusCode).toBe(200);
+    const sub = await act(a.cookie, { type: 'company.found', name: 'Tycoon Farms' });
+    expect(sub.statusCode, sub.body).toBe(200);
+    const farm = await act(b.cookie, { type: 'business.buy', kind: 'farm' });
+    expect(farm.statusCode).toBe(200);
+    expect((await act(b.cookie, { type: 'offer.make', businessId: farm.json().data.id, price: 300 })).statusCode).toBe(422); // own business
+    const offer = await act(a.cookie, { type: 'offer.make', businessId: farm.json().data.id, price: 300 });
+    expect(offer.statusCode, offer.body).toBe(200);
+    const seen = (await ctx.app.inject({ method: 'GET', url: '/api/me', headers: { cookie: b.cookie } })).json();
+    expect(seen.player.offersReceived).toHaveLength(1);
+    expect((await act(b.cookie, { type: 'offer.respond', offerId: offer.json().data.id, accept: true })).statusCode).toBe(200);
+    let me = (await ctx.app.inject({ method: 'GET', url: '/api/me', headers: { cookie: a.cookie } })).json();
+    const bought = me.player.businesses.find((x: { id: string }) => x.id === farm.json().data.id);
+    expect(bought).toBeTruthy();
+    expect((await act(a.cookie, { type: 'company.assign', businessId: bought.id, companyId: sub.json().data.id })).statusCode).toBe(200);
+    const bank = await act(a.cookie, { type: 'business.buy', kind: 'bank' });
+    expect(bank.statusCode, bank.body).toBe(200);
+    expect((await act(a.cookie, { type: 'bank.deposit', businessId: bank.json().data.id, amount: 1000 })).statusCode).toBe(200);
+    me = (await ctx.app.inject({ method: 'GET', url: '/api/me', headers: { cookie: a.cookie } })).json();
+    expect(me.player.company.name).toBe('Tycoon Holdings');
+    expect(me.player.company.byCompany[sub.json().data.id].businesses).toBe(1);
+    expect(me.player.rankTitle).toBe('Industrialist');
+    void meB;
+  });
+
   it('records every gold movement in the ledger', async () => {
     const { cookie } = await register();
     await act(cookie, { type: 'trade', side: 'buy', resource: 'wheat', qty: 3 });

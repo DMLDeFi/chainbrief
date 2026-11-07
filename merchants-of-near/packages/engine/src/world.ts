@@ -6,6 +6,7 @@ import { citizenBaseDemand, demandFactor, maybeStartEvent, productionFactor, upd
 import { merchantDaily, runMerchants } from './merchants';
 import { businessDaily, runBusiness } from './businesses';
 import { landTaxDaily } from './property';
+import { corporateDaily, expireOffers } from './corporate';
 import { cityInvest, civicDaily, FOOD, granaryFactor, infraLevel, populationCap, sizeFactors } from './civic';
 import { collectLoans } from './banking';
 import { playerDaily } from './players';
@@ -44,6 +45,7 @@ export function createWorld(seed = 20260101): WorldState {
     reported: Object.fromEntries(MARKETS.map((id) => [id, { price: { ...markets[id].price }, stock: { ...markets[id].stock } }])) as WorldState['reported'],
     cities: Object.fromEntries(MARKETS.map((id) => [id, { population: CITY_DEFS[id].population, growth: 0, popHistory: [] as number[], infra: {}, projects: {} }])) as unknown as WorldState['cities'],
     shipments: {},
+    offers: {},
     stats: { dayFoodSatisfaction: 0, lastDayFoodSatisfaction: 1 },
   };
   for (const m of Object.values(merchants)) for (const r of RESOURCES) m.beliefs[r] = markets.nearhaven.price[r];
@@ -188,7 +190,7 @@ function daily(world: WorldState): void {
   recirculate(world);
   for (const b of Object.values(world.businesses)) businessDaily(world, b);
   collectLoans(world);
-  for (const p of Object.values(world.players)) { landTaxDaily(world, p); playerDaily(world, p); }
+  for (const p of Object.values(world.players)) { landTaxDaily(world, p); corporateDaily(world, p); playerDaily(world, p); }
 
   // Population responds to how well the town was fed.
   const sat = world.stats.dayFoodSatisfaction / TIME.ticksPerDay;
@@ -251,6 +253,7 @@ export function stepWorld(world: WorldState): void {
   regionFlows(world);
   processShipments(world);
   processRoutes(world);
+  expireOffers(world);
   runMerchants(world);
   for (const b of Object.values(world.businesses)) runBusiness(world, b);
   for (const id of MARKETS) updatePressure(world.markets[id], id === 'nearhaven' ? Object.fromEntries((Object.keys(CITIZEN_DEMAND) as Resource[]).map((r) => [r, citizenBaseDemand(world, r)])) : {});
