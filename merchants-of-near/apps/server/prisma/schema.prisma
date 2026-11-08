@@ -1,0 +1,79 @@
+// Merchants of NEAR — persistence schema (PostgreSQL).
+// The authoritative world simulation runs in memory on the server and is
+// snapshotted here; accounts, sessions, the financial ledger and blockchain
+// transactions are stored as first-class rows.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String    @id
+  username      String    @unique
+  passwordHash  String?
+  nearAccountId String?   @unique
+  createdAt     DateTime  @default(now())
+  sessions      Session[]
+}
+
+model Session {
+  tokenHash String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model WorldSnapshot {
+  id        String   @id
+  tick      Int
+  data      Json
+  updatedAt DateTime @updatedAt
+}
+
+model LedgerEntry {
+  id        BigInt   @id @default(autoincrement())
+  playerId  String
+  tick      Int
+  type      String
+  goldDelta Decimal  @db.Decimal(14, 2)
+  items     Json?
+  details   Json
+  createdAt DateTime @default(now())
+
+  @@index([playerId, id])
+}
+
+model IdempotencyKey {
+  key       String   @id
+  userId    String
+  response  Json
+  createdAt DateTime @default(now())
+}
+
+model ChainTransaction {
+  hash       String    @id
+  userId     String
+  accountId  String
+  kind       String
+  status     String
+  reference  String?
+  error      String?
+  createdAt  DateTime  @default(now())
+  verifiedAt DateTime?
+
+  @@index([userId])
+}
+
+model NearChallenge {
+  nonce     String   @id
+  userId    String?
+  expiresAt DateTime
+}

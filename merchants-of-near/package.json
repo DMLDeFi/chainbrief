@@ -1,0 +1,31 @@
+{
+  "name": "merchants-of-near",
+  "private": true,
+  "version": "1.0.0",
+  "description": "An AI-powered economic strategy game with autonomous merchants and NEAR-backed ownership.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c yellow,cyan \"npm run dev -w @mon/server\" \"npm run dev -w @mon/web\"",
+    "build": "npm run build -w @mon/web",
+    "start": "concurrently -n server,web \"npm run start -w @mon/server\" \"npm run start -w @mon/web\"",
+    "test": "vitest run",
+    "typecheck": "tsc -p packages/engine && tsc -p apps/server && tsc -p apps/web --noEmit",
+    "sim": "tsx scripts/simulate.ts",
+    "keygen": "tsx scripts/keygen.ts",
+    "start:public": "node scripts/start-public.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "concurrently": "^10.0.6",
+    "near-api-js": "^7.4.0",
+    "tsx": "^4.23.15",
+    "typescript": "5.9",
+    "vitest": "^5.1.0"
+  }
+}

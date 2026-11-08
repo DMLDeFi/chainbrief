@@ -1,0 +1,11 @@
+**/node_modules
+**/.next
+contract/target
+**/data
+.env
+**/.env
+**/.env.local
+apps/server/src/generated
+*.tsbuildinfo
+apps/web/public/audio/*
+!apps/web/public/audio/README.md
