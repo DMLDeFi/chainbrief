@@ -1,3 +1,4 @@
+import { guildsView, playerGuildView } from './guilds';
 import { contractsView } from './contracts';
 import { MARKETS, RESOURCES, TIME, type MarketId } from './config';
 import { CITY_DEFS } from './cities';
@@ -117,6 +118,8 @@ export function publicSnapshot(world: WorldState, feedSince = 0) {
     })) as Record<MarketId, CitySnapshot>,
     /** Delivery jobs open or in progress in every city. */
     contracts: contractsView(world),
+    /** Merchant guilds and the season race. */
+    guilds: guildsView(world),
     /** Caravans on the road (AI traders and player shipments), for the world map. */
     traffic: [
       ...Object.values(world.merchants).filter((m) => m.travel).map((m) => ({ kind: 'merchant' as const, id: m.id, name: m.name, from: m.travel!.from ?? m.location, to: m.travel!.to, arriveTick: m.travel!.arriveTick })),
@@ -167,6 +170,7 @@ export function playerView(world: WorldState, playerId: string) {
     netWorth: playerNetWorth(world, p),
     levelTitle: levelTitle(p.level),
     nextLevel: nextLevelRequirements(p),
+    guild: playerGuildView(world, p),
     capacity: playerCapacity(world, playerId),
     used: Math.round(invTotal(p.inventory) * 10) / 10,
     warehouseExpansionCost: warehouseExpansionCost(p),

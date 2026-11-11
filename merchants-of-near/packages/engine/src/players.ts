@@ -1,3 +1,4 @@
+import { awardPoints } from './guilds';
 import { PLAYER, RESOURCE_DEFS, RESOURCES, type MarketId, type Resource } from './config';
 import type { Listing, PlayerState, Result, WorldState } from './types';
 import { addInv, clamp, dayOf, fail, fmt, invTotal, money, newId, ok, pct, pushFeed } from './internal';
@@ -119,6 +120,7 @@ export function playerTrade(world: WorldState, playerId: string, req: TradeReque
     if (held < qty) return fail(`You only have ${Math.floor(held)} ${r}${marketId === 'nearhaven' ? '' : ` in ${CITY_DEFS[marketId].name}`}`);
     settleOnMarket(world, market, r, 'sell', quote);
     realized = money((quote.avgPrice - (p.costBasis[r] ?? 0)) * qty);
+    awardPoints(world, p, realized);
     p.gold = money(p.gold + quote.total);
     addInv(store, r, -qty);
     if (totalHeld(world, p, r) <= 0) delete p.costBasis[r];

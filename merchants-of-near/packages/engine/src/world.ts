@@ -1,3 +1,4 @@
+import { guildsDaily } from './guilds';
 import { contractsDaily, postContracts } from './contracts';
 import { CITIZEN_DEMAND, ECONOMY, MARKETS, RESOURCE_DEFS, RESOURCES, SEASONAL_DEMAND, TIME, type Resource } from './config';
 import type { WorldState } from './types';
@@ -193,6 +194,7 @@ function daily(world: WorldState): void {
   for (const b of Object.values(world.businesses)) businessDaily(world, b);
   collectLoans(world);
   contractsDaily(world);
+  guildsDaily(world);
   for (const p of Object.values(world.players)) { landTaxDaily(world, p); corporateDaily(world, p); playerDaily(world, p); }
 
   // Population responds to how well the town was fed.

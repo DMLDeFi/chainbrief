@@ -1,3 +1,4 @@
+import { awardPoints } from './guilds';
 import { MARKET_DEFS, MARKETS, RESOURCE_DEFS, type MarketId, type Resource } from './config';
 import { inCity } from './bizIndex';
 import type { BusinessKind, CityState, PlayerState, Result, WorldState } from './types';
@@ -124,6 +125,7 @@ export function fundProject(world: WorldState, playerId: string, req: { city: un
   world.markets[city].treasury = money(world.markets[city].treasury + pay);
   p.patronage ??= {};
   p.patronage[city] = money((p.patronage[city] ?? 0) + pay);
+  awardPoints(world, p, pay / 2);
   p.xp += Math.floor(pay / 20);
   p.reputation = Math.min(100, p.reputation + Math.min(5, Math.floor(pay / 200)));
   world.ledger.push({ tick: world.tick, playerId, type: 'city.fund', goldDelta: -pay, details: { city, project: kind } });

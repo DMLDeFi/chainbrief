@@ -78,3 +78,13 @@ describe('delivery contracts', () => {
     expect(Object.keys(w.contracts!).length).toBeGreaterThan(0);
   });
 });
+
+describe('starter jobs', () => {
+  it('always offers a Nearhaven job a newcomer can afford with 100 gold', () => {
+    for (const seed of [1, 7, 42, 123, 999]) {
+      const w = freshWorld(seed);
+      const cheap = openIn(w, 'nearhaven').filter((c) => w.markets.nearhaven.price[c.resource] * c.qty * 1.25 <= 100);
+      expect(cheap.length).toBeGreaterThan(0);
+    }
+  });
+});

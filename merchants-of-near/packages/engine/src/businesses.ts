@@ -1,3 +1,4 @@
+import { awardPoints } from './guilds';
 import { ECONOMY, MARKETS, RESOURCE_DEFS, RESOURCES, type MarketId, type Recipe, type Resource } from './config';
 import { invalidateBizIndex, ownedBy } from './bizIndex';
 import { freightCost, travelTicks } from './cities';
@@ -275,6 +276,7 @@ export function buyBusiness(world: WorldState, playerId: string, kind: BusinessK
   if (kind === 'trading' && !p.marketAccess.includes('aurora')) p.marketAccess.push('aurora');
   world.ledger.push({ tick: world.tick, playerId, type: 'business.buy', goldDelta: -q.total, details: { businessId: b.id, kind, city, land: q.land } });
   pushFeed(world, { kind: 'player', actor: playerId, market: city, text: `${p.name} opened a new ${def.name.toLowerCase()} in ${cityName}.`, severity: 'good' });
+  awardPoints(world, world.players[playerId], 50);
   return ok(b);
 }
 
