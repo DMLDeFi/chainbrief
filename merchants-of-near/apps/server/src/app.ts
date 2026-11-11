@@ -360,7 +360,9 @@ export async function buildApp(deps: AppDeps) {
   app.setErrorHandler((err, _req, reply) => {
     if ((err as { statusCode?: number }).statusCode === 429) return reply.code(429).send({ error: 'Too many requests' });
     app.log.error(err);
-    return reply.code((err as { statusCode?: number }).statusCode ?? 500).send({ error: 'Server error' });
+    const status = (err as { statusCode?: number }).statusCode ?? 500;
+    // Hosted serverless, name the failure so it can be diagnosed from the screen and the logs.
+    return reply.code(status).send({ error: deps.serverless && status >= 500 ? `Server error: ${(err as Error).message}`.slice(0, 300) : 'Server error' });
   });
 
   return app;
