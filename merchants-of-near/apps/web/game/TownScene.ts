@@ -6,16 +6,26 @@ import { makeTileTextures, makeTreeTextures } from './textures';
 import { SPECS, drawBuilding, houseSpec, type BuildingArt } from './art/buildings';
 import { LOOKS, buildCharacter, citizenLook } from './art/characters';
 import { RESOURCE_COLOR, makePropTextures } from './art/props';
+import { Avatar, toGrid, type Place } from './avatar';
 
 export type Selection =
   | { type: 'merchant'; id: string }
   | { type: 'exchange' }
-  | { type: 'plot'; plot: number; city?: string; businessId?: string; ownerId?: string };
+  | { type: 'plot'; plot: number; city?: string; businessId?: string; ownerId?: string }
+  | { type: 'place'; id: 'tavern' };
+
+/** What the minimap draws: the ground once, and the moving parts several times a second. */
+export interface MinimapBase { x0: number; y0: number; x1: number; y1: number; cells: string; blocks: Array<{ gx: number; gy: number; w: number; d: number; color: string }> }
+export interface MinimapLive { avatar: { gx: number; gy: number } | null; merchants: Array<{ gx: number; gy: number }>; view: Array<{ gx: number; gy: number }> }
 
 export interface TownCallbacks {
   onSelect: (s: Selection) => void;
   getPlayerId: () => string | null;
   getSettings: () => { weather: boolean; reducedMotion: boolean };
+  /** The player's merchant name, shown over their avatar. */
+  getPlayerName?: () => string | null;
+  /** The avatar walked up to (or away from) somewhere it can enter. */
+  onNear?: (label: string | null) => void;
 }
 
 type Anim = 'idle' | 'walk' | 'run' | 'work' | 'carry' | 'cheer' | 'sad' | 'sleep';
@@ -121,6 +131,11 @@ export class TownScene extends Phaser.Scene {
   private firstSnap = true;
   private waterFrame = 0;
   private keys?: Record<string, Phaser.Input.Keyboard.Key>;
+  /** The player's own merchant on the streets, and whether the keys walk them (or pan the camera). */
+  private avatar?: Avatar<Selection>;
+  private walkMode = true;
+  private places: Array<Place<Selection>> = [];
+  private blockedPlots: Array<{ gx: number; gy: number }> = [];
 
   constructor() {
     super('town');
@@ -165,6 +180,7 @@ export class TownScene extends Phaser.Scene {
     this.buildMarketSquare();
     this.buildProps();
     this.buildNpcs();
+    this.buildAvatar();
     this.buildAtmosphere();
     this.setupCamera();
 
@@ -740,7 +756,11 @@ export class TownScene extends Phaser.Scene {
       this.dragging = true;
       this.dragVel = { x: 0, y: 0 };
     });
-    this.input.on('pointerup', () => (this.dragging = false));
+    this.input.on('pointerup', (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
+      this.dragging = false;
+      // A tap on open ground walks the avatar there.
+      if (this.walkMode && this.avatar?.ready && this.dragDist < 8 && !over.length && this.onCanvas(p) && !this.cinematic) this.avatar.walkTo(p.worldX, p.worldY);
+    });
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (this.hoverLabel.visible) this.hoverLabel.setPosition(p.worldX, p.worldY - 14);
       if (!p.isDown) return;
@@ -755,6 +775,7 @@ export class TownScene extends Phaser.Scene {
       }
       const dx = p.x - p.prevPosition.x, dy = p.y - p.prevPosition.y;
       this.dragDist += Math.abs(dx) + Math.abs(dy);
+      if (this.dragDist > 8 && this.avatar) this.avatar.following = false;
       cam.scrollX -= dx / cam.zoom;
       cam.scrollY -= dy / cam.zoom;
       this.dragVel = { x: dx / cam.zoom, y: dy / cam.zoom };
@@ -764,7 +785,7 @@ export class TownScene extends Phaser.Scene {
     });
     if (this.input.keyboard) {
       // enableCapture=false: never swallow keystrokes meant for the page's text fields.
-      this.keys = this.input.keyboard.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,Q,E', false) as Record<string, Phaser.Input.Keyboard.Key>;
+      this.keys = this.input.keyboard.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,Q,E,SHIFT', false) as Record<string, Phaser.Input.Keyboard.Key>;
     }
   }
 
@@ -793,6 +814,155 @@ export class TownScene extends Phaser.Scene {
     this.cameras.main.pan(p.x, p.y - 24, this.motionOk ? 800 : 1, 'Cubic.easeInOut');
   }
 
+  // -------------------------------------------------------------- avatar ---
+  private buildAvatar() {
+    try { this.walkMode = localStorage.getItem('mon.walk') !== '0'; } catch { /* storage unavailable */ }
+    const ex = BUILDINGS.find((b) => b.id === 'exchange')?.door ?? { gx: 15, gy: 17 };
+    this.avatar = new Avatar<Selection>(this, {
+      walkable: (gx, gy) => this.walkable(gx, gy),
+      depthAt: (gx, gy, y) => this.avatarDepth(gx, gy, y),
+      places: () => this.places,
+      onEnter: (sel) => this.cb.onSelect(sel),
+      onNear: (label) => this.cb.onNear?.(label),
+      start: { gx: ex.gx + 0.5, gy: ex.gy + 1.3 },
+      storageKey: `mon.avatar.${CITY_ID}`,
+    });
+  }
+
+  private updateAvatar(dt: number) {
+    const a = this.avatar;
+    if (!a) return;
+    const id = this.cb.getPlayerId();
+    if (!a.ready) {
+      if (!id || this.cinematic) return;
+      a.create(id, this.cb.getPlayerName?.() ?? 'You');
+    }
+    a.setVisible(!this.cinematic && !this.director.scripted);
+    const typing = typeof document !== 'undefined' && !!document.activeElement?.closest('input, textarea, select, [contenteditable="true"]');
+    const k = this.keys;
+    const keys = { x: 0, y: 0, run: false };
+    if (k && this.walkMode && !typing) {
+      keys.x = (k.D.isDown || k.RIGHT.isDown ? 1 : 0) - (k.A.isDown || k.LEFT.isDown ? 1 : 0);
+      keys.y = (k.S.isDown || k.DOWN.isDown ? 1 : 0) - (k.W.isDown || k.UP.isDown ? 1 : 0);
+      keys.run = k.SHIFT.isDown;
+    }
+    a.update(dt, keys);
+  }
+
+  /** Where feet may go: dry land inside the drawn town, not through walls. */
+  private walkable(gx: number, gy: number) {
+    const ex = growthExtent(this.openDistricts);
+    if (gx < ex.x0 + 2 || gy < ex.y0 + 2 || gx > ex.x1 - 1 || gy > ex.y1 - 1) return false;
+    if (this.kindAt(Math.floor(gx), Math.floor(gy)) === 'water' && !(CITY_BRIDGE && this.onBridge(gx, gy))) return false;
+    const inside = (b: { gx: number; gy: number; w: number; d: number }) => gx > b.gx + 0.08 && gx < b.gx + b.w - 0.08 && gy > b.gy + 0.08 && gy < b.gy + b.d - 0.08;
+    for (const b of BUILDINGS) if (inside(b)) return false;
+    for (const b of DECOR) if (inside(b)) return false;
+    for (const d of this.openDistricts) for (const h of d.houses) if (inside({ gx: h.gx, gy: h.gy, w: 1, d: 1 })) return false;
+    for (const p of this.blockedPlots) if (inside({ gx: p.gx, gy: p.gy, w: 2, d: 2 })) return false;
+    return true;
+  }
+
+  /** Buildings sort by their front corner, so beside a front wall the avatar must be lifted above that building. */
+  private avatarDepth(gx: number, gy: number, y: number) {
+    let d = y;
+    const check = (b: { gx: number; gy: number; w: number; d: number }) => {
+      const right = gx >= b.gx + b.w - 0.1 && gx < b.gx + b.w + 1.2 && gy > b.gy - 0.3 && gy < b.gy + b.d + 1.2;
+      const front = gy >= b.gy + b.d - 0.1 && gy < b.gy + b.d + 1.2 && gx > b.gx - 0.3 && gx < b.gx + b.w + 1.2;
+      if (right || front) d = Math.max(d, iso(b.gx + b.w, b.gy + b.d).y);
+    };
+    for (const b of BUILDINGS) check(b);
+    for (const b of DECOR) check(b);
+    for (const p of this.blockedPlots) check({ gx: p.gx, gy: p.gy, w: 2, d: 2 });
+    for (const dd of this.openDistricts) for (const h of dd.houses) check({ gx: h.gx, gy: h.gy, w: 1, d: 1 });
+    return d;
+  }
+
+  /** The main road crosses the river on a bridge. */
+  private onBridge(gx: number, gy: number) {
+    return Math.abs(gy - 15.5) < 0.7 && gx < 4;
+  }
+
+  /** Doors the avatar can walk up to: the exchange, every workshop, the tavern and the plots. */
+  private buildPlaces(snap: PublicSnapshot) {
+    const out: Array<Place<Selection>> = [];
+    for (const b of BUILDINGS) {
+      const at = { gx: b.door.gx + 0.5, gy: b.door.gy + 0.5 };
+      if (b.id === 'exchange') out.push({ ...at, label: `Trade at ${b.label}`, select: { type: 'exchange' } });
+      else if (b.merchant) out.push({ ...at, label: `Visit ${b.label}`, select: { type: 'merchant', id: b.merchant } });
+    }
+    const tavern = DECOR.find((d) => d.id === 'tavern');
+    if (tavern) out.push({ gx: tavern.gx + tavern.w / 2 + 0.2, gy: tavern.gy + tavern.d + 0.4, label: 'Enter the Gilded Tankard', select: { type: 'place', id: 'tavern' } });
+    const me = this.cb.getPlayerId();
+    const slots = this.plotSlots();
+    const here = snap.businesses.filter((b) => (b.city ?? 'nearhaven') === CITY_ID);
+    const land = (snap.land ?? []).filter((l) => l.city === CITY_ID);
+    const townPlots = Math.min(PLOTS.length, snap.cityLand?.[CITY_ID]?.plots ?? PLOTS.length);
+    this.blockedPlots = [];
+    slots.forEach((pl, i) => {
+      const biz = here.find((b) => b.plot === i);
+      const owned = land.find((l) => l.plot === i);
+      if (biz) {
+        this.blockedPlots.push(pl);
+        out.push({ gx: pl.gx + 1, gy: pl.gy + 1, r: 2, label: biz.ownerId === me ? `Run your ${biz.kind}` : `Visit ${biz.owner}'s ${biz.kind}`, select: { type: 'plot', plot: i, city: CITY_ID, businessId: biz.id, ownerId: biz.ownerId } });
+      } else if (owned || i < townPlots) {
+        out.push({ gx: pl.gx + 1, gy: pl.gy + 1, r: 1.3, label: owned ? (owned.ownerId === me ? 'Build on your land' : `${owned.owner}'s land`) : 'Plot for sale', select: { type: 'plot', plot: i, city: CITY_ID, ownerId: owned?.ownerId } });
+      }
+    });
+    this.places = out;
+  }
+
+  /** Walk with the keys and follow the avatar (on), or pan the camera freely (off). */
+  setWalkMode(on: boolean) {
+    this.walkMode = on;
+    if (this.avatar) this.avatar.following = on;
+  }
+
+  setJoystick(x: number, y: number) {
+    if (this.avatar) { this.avatar.stick = { x, y }; if (x || y) this.avatar.following = true; }
+  }
+
+  enterNearby() {
+    this.avatar?.enter();
+  }
+
+  /** Bring the camera back to the avatar. */
+  findAvatar() {
+    if (!this.avatar?.ready) return;
+    this.avatar.following = true;
+    this.walkMode = true;
+  }
+
+  minimapBase(): MinimapBase {
+    const ex = growthExtent(this.openDistricts);
+    const x0 = ex.x0 + 2, y0 = ex.y0 + 2, x1 = ex.x1 - 1, y1 = ex.y1 - 1;
+    const code: Record<string, string> = { water: 'w', road: 'r', plaza: 'p', field: 'f', dirt: 'd', grass: 'g', sand: 's' };
+    let cells = '';
+    for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++) cells += code[this.kindAt(gx, gy)] ?? 'g';
+    const blocks: MinimapBase['blocks'] = [
+      ...BUILDINGS.map((b) => ({ gx: b.gx, gy: b.gy, w: b.w, d: b.d, color: b.id === 'exchange' ? '#f0c45a' : '#' + b.roof.toString(16).padStart(6, '0') })),
+      ...DECOR.map((b) => ({ gx: b.gx, gy: b.gy, w: b.w, d: b.d, color: b.id === 'tavern' ? '#c2552f' : '#8a6a46' })),
+      ...this.openDistricts.flatMap((d) => d.houses.map((h) => ({ gx: h.gx, gy: h.gy, w: 1, d: 1, color: '#8a6a46' }))),
+      ...this.blockedPlots.map((p) => ({ gx: p.gx, gy: p.gy, w: 2, d: 2, color: '#00ec97' })),
+    ];
+    return { x0, y0, x1, y1, cells, blocks };
+  }
+
+  minimapLive(): MinimapLive {
+    const v = this.cameras.main.worldView;
+    return {
+      avatar: this.avatar?.grid() ?? null,
+      merchants: [...this.npcs.values()].map((n) => toGrid(n.sprite.x, n.sprite.y)),
+      view: [toGrid(v.x, v.y), toGrid(v.right, v.y), toGrid(v.right, v.bottom), toGrid(v.x, v.bottom)],
+    };
+  }
+
+  /** Centre the camera on a grid point (from a minimap click); the avatar walks there when walking. */
+  goTo(gx: number, gy: number) {
+    const p = iso(gx, gy);
+    if (this.walkMode && this.avatar?.ready) { this.avatar.walkTo(p.x, p.y); return; }
+    this.cameras.main.pan(p.x, p.y, this.motionOk ? 500 : 1, 'Cubic.easeInOut');
+  }
+
   // ----------------------------------------------------- live world sync ---
   setWorld(snap: PublicSnapshot) {
     this.snap = snap;
@@ -814,6 +984,7 @@ export class TownScene extends Phaser.Scene {
     this.syncMerchants(snap);
     this.syncWealth(snap);
     this.syncPlots(snap);
+    this.buildPlaces(snap);
     this.applyWeather(snap);
     this.floatFeed(snap.feed);
     this.priceIndicators(snap);
@@ -1278,7 +1449,7 @@ export class TownScene extends Phaser.Scene {
   private updateCamera(dt: number) {
     const cam = this.cameras.main;
     const typing = typeof document !== 'undefined' && !!document.activeElement?.closest('input, textarea, select, [contenteditable="true"]');
-    if (this.keys && !typing) {
+    if (this.keys && !typing && !(this.walkMode && this.avatar?.ready)) {
       const k = this.keys;
       const sp = (480 * dt) / cam.zoom;
       if (k.A.isDown || k.LEFT.isDown) cam.scrollX -= sp;
@@ -1287,6 +1458,19 @@ export class TownScene extends Phaser.Scene {
       if (k.S.isDown || k.DOWN.isDown) cam.scrollY += sp;
       if (Phaser.Input.Keyboard.JustDown(k.Q)) this.zoomBy(0.85);
       if (Phaser.Input.Keyboard.JustDown(k.E)) this.zoomBy(1.18);
+    }
+    if (this.keys && !typing) {
+      if (this.walkMode) {
+        if (Phaser.Input.Keyboard.JustDown(this.keys.Q)) this.zoomBy(0.85);
+        if (Phaser.Input.Keyboard.JustDown(this.keys.E)) this.zoomBy(1.18);
+      }
+    }
+    // Follow the avatar while walking.
+    if (this.walkMode && this.avatar?.ready && this.avatar.following && !this.cinematic) {
+      const a = this.avatar.sprite;
+      const k = Math.min(1, dt * (this.motionOk ? 5 : 60));
+      cam.centerOn(cam.midPoint.x + (a.x - cam.midPoint.x) * k, cam.midPoint.y + (a.y - 30 - cam.midPoint.y) * k);
+      this.dragVel = { x: 0, y: 0 };
     }
     if (this.cinematic) {
       // Slow drift past the points of interest.
@@ -1322,6 +1506,7 @@ export class TownScene extends Phaser.Scene {
     const dt = Math.min(0.1, delta / 1000);
     const cam = this.cameras.main;
     if (!this.director.scripted) this.updateCamera(dt);
+    this.updateAvatar(dt);
     if (!this.director.scripted) this.adaptQuality(delta);
     const motion = this.motionOk;
     let hour = 12;
