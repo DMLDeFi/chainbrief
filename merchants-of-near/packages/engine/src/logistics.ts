@@ -1,3 +1,4 @@
+import { postContracts } from './contracts';
 import { MARKETS, RESOURCE_DEFS, RESOURCES, type MarketId, type Resource } from './config';
 import type { Inventory, PlayerState, Result, Shipment, TradeRoute, WorldState } from './types';
 import { addInv, fail, fmt, invTotal, money, newId, ok, pushFeed } from './internal';
@@ -212,6 +213,8 @@ export function migrateWorld(world: WorldState): WorldState {
     // The old Port Aurora unlock becomes a proper office with a depot.
     if (p.marketAccess?.includes('aurora') && !p.charters.includes('aurora')) p.charters.push('aurora');
   }
+  // Saves from before delivery contracts get a first set of jobs.
+  if (!world.contracts) { world.contracts = {}; postContracts(world); }
   return world;
 }
 

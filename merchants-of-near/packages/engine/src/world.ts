@@ -1,3 +1,4 @@
+import { contractsDaily, postContracts } from './contracts';
 import { CITIZEN_DEMAND, ECONOMY, MARKETS, RESOURCE_DEFS, RESOURCES, SEASONAL_DEMAND, TIME, type Resource } from './config';
 import type { WorldState } from './types';
 import { clamp, dayOf, money, pct, pushFeed, resourceMap, seasonOf, fmt } from './internal';
@@ -50,6 +51,7 @@ export function createWorld(seed = 20260101): WorldState {
   };
   for (const m of Object.values(merchants)) for (const r of RESOURCES) m.beliefs[r] = markets.nearhaven.price[r];
   pushFeed(world, { kind: 'event', text: 'The gates of Nearhaven open. Ten merchants begin a new trading season.' });
+  postContracts(world);
   return world;
 }
 
@@ -190,6 +192,7 @@ function daily(world: WorldState): void {
   recirculate(world);
   for (const b of Object.values(world.businesses)) businessDaily(world, b);
   collectLoans(world);
+  contractsDaily(world);
   for (const p of Object.values(world.players)) { landTaxDaily(world, p); corporateDaily(world, p); playerDaily(world, p); }
 
   // Population responds to how well the town was fed.

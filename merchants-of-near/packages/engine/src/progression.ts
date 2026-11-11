@@ -61,6 +61,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'first_trade', title: 'First Coin', description: 'Complete your first trade.', xp: 10, check: (_w, p) => (p.lifetime.trades ?? 0) >= 1 },
   { id: 'profit_100', title: 'In the Black', description: 'Realise 100 gold of trading profit.', xp: 40, check: (_w, p) => (p.lifetime.realizedProfit ?? 0) >= 100 },
   { id: 'volume_1000', title: 'Market Regular', description: 'Trade 1,000 gold of goods.', xp: 40, check: (_w, p) => (p.lifetime.volume ?? 0) >= 1000 },
+  { id: 'first_contract', title: 'Hired Hand', description: 'Deliver your first contract.', xp: 30, check: (_w, p) => (p.lifetime.contracts ?? 0) >= 1 },
+  { id: 'contractor', title: 'Trusted Carrier', description: 'Deliver 10 contracts.', xp: 120, check: (_w, p) => (p.lifetime.contracts ?? 0) >= 10 },
   { id: 'landowner', title: 'Landowner', description: 'Own your first business.', xp: 40, check: (w, p) => owned(w, p).length >= 1 },
   { id: 'diversified', title: 'Diversified', description: 'Own three different kinds of business.', xp: 80, check: (w, p) => new Set(owned(w, p).map((b) => b.kind)).size >= 3 },
   { id: 'employer', title: 'Employer', description: 'Employ 6 workers across your businesses.', xp: 60, check: (w, p) => owned(w, p).reduce((s, b) => s + b.workers, 0) >= 6 },
