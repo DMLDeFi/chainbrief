@@ -17,9 +17,11 @@ import { GameService } from './game';
 import { NearService } from './near/service';
 import { MerchantDialogue } from './ai';
 import { buildApp } from './app';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 
 type App = Awaited<ReturnType<typeof buildApp>>;
-interface Runtime { config: ServerConfig; store: PrismaStore; game: GameService; near: NearService; app: App }
+interface Runtime { config: ServerConfig; store: PrismaStore; game: GameService; near: NearService; app: App; port: number }
 
 const SAVE_EVERY_TICKS = 5;
 const NEAR_SYNC_MS = 5 * 60_000;
@@ -44,8 +46,12 @@ async function boot(): Promise<Runtime> {
   const near = new NearService(config.near, store);
   const dialogue = new MerchantDialogue(config.anthropicApiKey, config.anthropicModel);
   const app = await buildApp({ config, store, game, near, dialogue, serverless: true });
-  await app.ready();
-  return { config, store, game, near, app };
+  // Requests reach the app over a private loopback port, as they do on a normal server.
+  // (fastify.inject loads light-my-request, whose ESM-only cookie dependency fails to load
+  // inside the Vercel function bundle.)
+  await app.listen({ port: 0, host: '127.0.0.1' });
+  const port = (app.server.address() as AddressInfo).port;
+  return { config, store, game, near, app, port };
 }
 
 /** Handle one HTTP request (a Fetch API Request from a Next.js route handler). */
@@ -87,7 +93,11 @@ async function serve(rt: Runtime, request: Request, body: string | undefined): P
   const url = new URL(request.url);
   const headers: Record<string, string> = {};
   request.headers.forEach((v, k) => { headers[k] = v; });
-  const res = await app.inject({ method: request.method as 'GET', url: url.pathname + url.search, headers, payload: body });
+  delete headers['content-length'];
+  delete headers['transfer-encoding'];
+  delete headers['connection'];
+  delete headers['accept-encoding'];
+  const res = await forward(rt.port, request.method, url.pathname + url.search, headers, body);
 
   // Player actions (anything but a read) are saved now; time alone every few ticks.
   const write = request.method !== 'GET' && request.method !== 'HEAD';
@@ -113,5 +123,20 @@ async function serve(rt: Runtime, request: Request, body: string | undefined): P
     if (Array.isArray(v)) v.forEach((x) => out.append(k, String(x)));
     else out.set(k, String(v));
   }
-  return new Response(res.statusCode === 204 || request.method === 'HEAD' ? null : new Uint8Array(res.rawPayload), { status: res.statusCode, headers: out });
+  return new Response(res.statusCode === 204 || res.statusCode === 304 || request.method === 'HEAD' ? null : new Uint8Array(res.body), { status: res.statusCode, headers: out });
+}
+
+/** Send one request to the app on its loopback port and read the whole response. */
+function forward(port: number, method: string, path: string, headers: Record<string, string>, body: string | undefined) {
+  return new Promise<{ statusCode: number; headers: http.IncomingHttpHeaders; body: Buffer }>((resolve, reject) => {
+    const req = http.request({ host: '127.0.0.1', port, method, path, headers: body === undefined ? headers : { ...headers, 'content-length': String(Buffer.byteLength(body)) } }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (c: Buffer) => chunks.push(c));
+      res.on('end', () => resolve({ statusCode: res.statusCode ?? 500, headers: res.headers, body: Buffer.concat(chunks) }));
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    if (body !== undefined) req.write(body);
+    req.end();
+  });
 }
