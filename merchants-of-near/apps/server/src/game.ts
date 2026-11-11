@@ -1,6 +1,7 @@
 import {
   joinGuild,
   playDice,
+  claimMilestone,
   playCups,
   betOnRace,
   racesTick,
@@ -111,6 +112,7 @@ export const ActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('listing.buy'), listingId: id }),
   z.object({ type: z.literal('deal'), merchantId: id, side: z.enum(['buy', 'sell']), resource, qty: z.number().int().min(1).max(200), unitPrice: gold }),
   z.object({ type: z.literal('mission.claim'), missionId: id }),
+  z.object({ type: z.literal('milestone.claim'), milestone: id }),
   z.object({ type: z.literal('city.charter'), city }),
   z.object({ type: z.literal('ship'), from: city, to: city, resource, qty }),
 ]);
@@ -384,6 +386,9 @@ export class GameService {
         break;
       case 'game.race':
         r = betOnRace(w, userId, action.horse, action.stake);
+        break;
+      case 'milestone.claim':
+        r = claimMilestone(w, userId, action.milestone);
         break;
       case 'mission.claim': {
         const c = claimMission(w, p, action.missionId);
