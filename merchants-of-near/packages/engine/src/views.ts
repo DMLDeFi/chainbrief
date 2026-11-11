@@ -1,3 +1,4 @@
+import { racesView } from './games';
 import { guildsView, playerGuildView } from './guilds';
 import { contractsView } from './contracts';
 import { MARKETS, RESOURCES, TIME, type MarketId } from './config';
@@ -120,6 +121,8 @@ export function publicSnapshot(world: WorldState, feedSince = 0) {
     contracts: contractsView(world),
     /** Merchant guilds and the season race. */
     guilds: guildsView(world),
+    /** The hippodrome: the open race and the last result. */
+    races: racesView(world),
     /** Caravans on the road (AI traders and player shipments), for the world map. */
     traffic: [
       ...Object.values(world.merchants).filter((m) => m.travel).map((m) => ({ kind: 'merchant' as const, id: m.id, name: m.name, from: m.travel!.from ?? m.location, to: m.travel!.to, arriveTick: m.travel!.arriveTick })),

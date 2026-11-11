@@ -20,3 +20,4 @@ export * from './corporate';
 export * from './bizIndex';
 export * from './contracts';
 export * from './guilds';
+export * from './games';
