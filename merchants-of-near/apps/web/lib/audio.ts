@@ -30,12 +30,13 @@ export interface Mood {
 const KEY = 'mon.audio';
 const DEFAULTS: AudioSettings = { music: true, sfx: true, volume: 0.55, source: 'auto' };
 
-// Scale degrees as semitones from the root.
-const DORIAN = [0, 2, 3, 5, 7, 9, 10];
-const AEOLIAN = [0, 2, 3, 5, 7, 8, 10];
-const MIXOLYDIAN = [0, 2, 4, 5, 7, 9, 10];
-// Chord roots (scale degree index) for an 8-bar cycle: i – VII – VI – VII …
-const PROGRESSION = [0, 6, 5, 6, 0, 3, 4, 0];
+// The epic score's harmony, as semitones from the root (D minor by default).
+// First half, brooding: i – VI – III – VII. Second half, heroic: i – VI – iv – V.
+const CHORDS_A = [[0, 3, 7], [-4, 0, 3], [3, 7, 10], [-2, 2, 5]];
+const CHORDS_B = [[0, 3, 7], [-4, 0, 3], [5, 8, 12], [7, 11, 14]];
+const EPIC_BARS = 16;
+// The horn theme (original), two notes a bar over the heroic half; null holds the note before.
+const HORN_THEME: Array<number | null> = [7, 12, 10, 7, 5, 3, 0, null, 5, 8, 12, 10, 7, 11, 14, null, null];
 
 const midiToHz = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -48,6 +49,7 @@ class GameAudio {
   private musicBus?: GainNode;
   private sfxBus?: GainNode;
   private echo?: { delay: DelayNode; fb: GainNode; wet: GainNode };
+  private hall?: ConvolverNode;
   private drone: OscillatorNode[] = [];
   private droneGain?: GainNode;
   private timer?: number;
@@ -269,6 +271,11 @@ class GameAudio {
   }
 
   // ------------------------------------------------------ generated music
+  //
+  // An original epic score, composed for the game and played live: low strings,
+  // a cello ostinato, war drums, a horn theme, choir and harp, in a large hall.
+  // A 16-bar cycle: a brooding first half, then the full heroic theme. Night is
+  // hushed (strings, choir, harp); events make it faster and darker.
   private rand() {
     this.rng = (this.rng * 1103515245 + 12345) & 0x7fffffff;
     return this.rng / 0x7fffffff;
@@ -277,48 +284,78 @@ class GameAudio {
     const h = this.mood.hour;
     return h >= 20 || h < 6;
   }
-  private scale() {
-    if (this.mood.tension) return AEOLIAN;
-    if (this.mood.season === 'winter') return AEOLIAN;
-    if (this.mood.season === 'summer') return MIXOLYDIAN;
-    return DORIAN;
-  }
   private root() {
-    return this.mood.season === 'winter' ? 46 : 50; // Bb2 in winter, D3 otherwise
+    // D minor; winter sinks to B-flat minor.
+    return this.mood.season === 'winter' ? 46 : 50;
   }
   private tempo() {
-    return this.night() ? 58 : this.mood.tension ? 92 : 76;
+    return this.night() ? 54 : this.mood.tension ? 84 : 66;
+  }
+
+  /** A generated hall: decaying stereo noise as the reverb's impulse response. */
+  private buildHall() {
+    const ctx = this.ctx!;
+    const len = Math.floor(ctx.sampleRate * 3.4);
+    const ir = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = ir.getChannelData(ch);
+      for (let i = 0; i < len; i++) {
+        const t = i / ctx.sampleRate;
+        d[i] = (Math.random() * 2 - 1) * Math.exp(-t * 1.9) * (t < 0.02 ? t / 0.02 : 1);
+      }
+    }
+    const conv = ctx.createConvolver();
+    conv.buffer = ir;
+    // Keep the hall's low end tight so the drums don't turn to mud.
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 160;
+    const wet = ctx.createGain();
+    wet.gain.value = 0.42;
+    conv.connect(hp).connect(wet).connect(this.musicBus!);
+    this.hall = conv;
+  }
+  /** Route a voice to the music bus, with some of it sent into the hall. */
+  private out(node: AudioNode, send = 0.5) {
+    node.connect(this.musicBus!);
+    if (this.hall && send > 0) {
+      const g = this.ctx!.createGain();
+      g.gain.value = send;
+      node.connect(g).connect(this.hall);
+    }
   }
 
   private startGenerated() {
     if (!this.ctx || !this.musicBus || this.timer !== undefined) return;
     const ctx = this.ctx;
+    if (!this.hall) this.buildHall();
     this.musicBus.gain.cancelScheduledValues(ctx.currentTime);
     this.musicBus.gain.setTargetAtTime(0.9, ctx.currentTime, 1.2);
-    // Drone: root + fifth, slowly breathing.
+    // A low organ-like pedal on the root and fifth, breathing slowly underneath everything.
     this.droneGain = ctx.createGain();
-    this.droneGain.gain.value = 0.045;
+    this.droneGain.gain.value = 0.018;
     const lp = ctx.createBiquadFilter();
     lp.type = 'lowpass';
-    lp.frequency.value = 600;
-    this.droneGain.connect(lp).connect(this.musicBus);
-    for (const interval of [0, 7, 12]) {
+    lp.frequency.value = 420;
+    this.droneGain.connect(lp);
+    this.out(lp, 0.6);
+    for (const interval of [0, 7]) {
       const o = ctx.createOscillator();
-      o.type = interval === 12 ? 'sine' : 'triangle';
-      o.frequency.value = midiToHz(this.root() - 12 + interval);
-      o.detune.value = (interval - 6) * 1.5;
+      o.type = 'triangle';
+      o.frequency.value = midiToHz(this.root() - 24 + interval);
       o.connect(this.droneGain);
       o.start();
       this.drone.push(o);
     }
     const lfo = ctx.createOscillator();
     const lfoGain = ctx.createGain();
-    lfo.frequency.value = 0.07;
-    lfoGain.gain.value = 0.02;
+    lfo.frequency.value = 0.05;
+    lfoGain.gain.value = 0.015;
     lfo.connect(lfoGain).connect(this.droneGain.gain);
     lfo.start();
     this.drone.push(lfo);
     this.nextNoteTime = ctx.currentTime + 0.1;
+    this.step = 0;
     this.timer = window.setInterval(() => this.schedule(), 90);
   }
 
@@ -340,50 +377,184 @@ class GameAudio {
     while (this.nextNoteTime < ctx.currentTime + 0.3) {
       this.playStep(this.step, this.nextNoteTime, sixteenth);
       this.nextNoteTime += sixteenth;
-      this.step = (this.step + 1) % (16 * PROGRESSION.length);
+      this.step = (this.step + 1) % (16 * EPIC_BARS);
     }
   }
 
   private playStep(step: number, t: number, sixteenth: number) {
-    const scale = this.scale();
     const bar = Math.floor(step / 16);
     const beat = step % 16;
-    const chordDeg = PROGRESSION[bar % PROGRESSION.length];
+    const heroic = bar >= 8 || this.mood.tension; // the second half of the cycle
+    const chord = (heroic ? CHORDS_B : CHORDS_A)[Math.floor((bar % 8) / 2)];
     const root = this.root();
-    const note = (deg: number, octave = 0) => root + 12 * (octave + Math.floor(deg / 7)) + scale[((deg % 7) + 7) % 7];
     const night = this.night();
+    const tense = this.mood.tension;
+    const barLen = sixteenth * 16;
 
-    // Bass on beat 1 and 3 (softer at night).
-    if (beat === 0 || (beat === 8 && !night)) this.pluck(midiToHz(note(chordDeg, -1)), t, night ? 0.09 : 0.12, 1.6, 900);
-
-    // Chord arpeggio on eighths.
-    if (beat % 2 === 0 && !(night && beat % 4 !== 0)) {
-      const tones = [chordDeg, chordDeg + 2, chordDeg + 4, chordDeg + 2];
-      const deg = tones[(beat / 2) % tones.length];
-      this.pluck(midiToHz(note(deg, 0)), t, 0.05, 0.9, 1800, true);
+    // Strings: the chord swells in every two bars, across two octaves.
+    if (beat === 0 && bar % 2 === 0) {
+      const dur = barLen * 2;
+      for (const n of chord) this.strings(midiToHz(root + n), t, dur, night ? 0.022 : 0.03);
+      for (const n of chord.slice(1)) this.strings(midiToHz(root + 12 + n), t, dur, night ? 0.012 : heroic ? 0.02 : 0.014);
+      this.strings(midiToHz(root - 12 + chord[0]), t, dur, 0.016, 600);
     }
-
-    // Melody: a random walk biased to chord tones, phrased with rests.
-    const density = night ? 0.22 : this.mood.tension ? 0.5 : 0.38;
-    if (beat % 2 === 0 && this.rand() < density && bar % 8 !== 7) {
-      const r = this.rand();
-      this.melody += r < 0.35 ? -1 : r < 0.7 ? 1 : r < 0.82 ? -2 : r < 0.94 ? 2 : 0;
-      this.melody = Math.max(3, Math.min(13, this.melody));
-      // Snap toward the chord on strong beats.
-      if (beat % 8 === 0) {
-        const chordTones = [chordDeg, chordDeg + 2, chordDeg + 4, chordDeg + 7];
-        this.melody = chordTones.reduce((a, b) => (Math.abs(b - this.melody) < Math.abs(a - this.melody) ? b : a));
+    // Choir: an "aah" on the heroic half, and softly through the night.
+    if (beat === 0 && bar % 2 === 0 && (heroic || night)) {
+      for (const n of [chord[1], chord[2]]) this.choir(midiToHz(root + 12 + n), t + 0.05, barLen * 2, night ? 0.018 : 0.026);
+    }
+    // Cello ostinato: driving eighths (sixteenths when the town is on edge).
+    if (!night && (tense ? true : beat % 2 === 0)) {
+      const pattern = [0, 0, 12, 0, 7, 0, 12, 7];
+      const idx = (tense ? beat : beat / 2) % pattern.length;
+      const n = root - 12 + chord[0] + pattern[Math.floor(idx)];
+      this.cello(midiToHz(n), t, sixteenth * (tense ? 0.9 : 1.7), heroic ? 0.05 : 0.038);
+    }
+    // War drums.
+    if (!night || tense) {
+      if (beat === 0) this.taiko(t, heroic ? 0.42 : 0.3, 58);
+      if (beat === 10 && heroic) this.taiko(t, 0.22, 66);
+      if (beat === 12) this.taiko(t, heroic ? 0.3 : 0.18, 62);
+      if (tense && (beat === 4 || beat === 6 || beat === 14)) this.taiko(t, 0.16, 74);
+      // A timpani roll into each half of the cycle.
+      if ((bar === 7 || bar === 15) && beat >= 8) this.taiko(t, 0.05 + (beat - 8) * 0.025, 92);
+    }
+    // Horns: the heroic theme, two notes a bar (a distant call at night).
+    if (heroic && (beat === 0 || beat === 8)) {
+      const phrase = HORN_THEME[(bar % 8) * 2 + (beat === 8 ? 1 : 0)];
+      if (phrase !== null && (!night || bar % 4 === 0)) {
+        const hold = HORN_THEME[(bar % 8) * 2 + (beat === 8 ? 2 : 1)] === null ? 2 : 1;
+        this.horn(midiToHz(root + 12 + phrase), t, sixteenth * 8 * hold, night ? 0.035 : 0.06);
+        if (!night) this.horn(midiToHz(root + phrase), t, sixteenth * 8 * hold, 0.03); // doubled an octave down
       }
-      const hz = midiToHz(note(this.melody, 1));
-      if (!night && this.mood.season === 'summer' && this.rand() < 0.4) this.flute(hz, t, sixteenth * 4);
-      else this.pluck(hz, t, 0.08, 1.2, 2600, true);
     }
+    // Brass stabs when an event has the town on edge.
+    if (tense && beat === 0) for (const n of chord) this.horn(midiToHz(root + n), t, sixteenth * 3, 0.03);
+    // Harp: arpeggios at night, and gently in the brooding half by day.
+    if ((night || !heroic) && beat % 2 === 0 && this.rand() < (night ? 0.7 : 0.35)) {
+      const tones = [chord[0], chord[1], chord[2], chord[0] + 12, chord[2], chord[1] + 12];
+      const n = tones[(beat / 2) % tones.length];
+      this.pluck(midiToHz(root + 12 + n), t, night ? 0.05 : 0.035, 1.4, 2400, true);
+    }
+    // Summer days: a wooden flute answers the horns now and then.
+    if (!night && !tense && this.mood.season === 'summer' && heroic && beat === 4 && this.rand() < 0.3) {
+      this.flute(midiToHz(root + 24 + chord[2]), t, sixteenth * 6);
+    }
+  }
 
-    // Frame drum: market bustle by day, insistent during tension.
-    if (!night || this.mood.tension) {
-      if (beat === 0 || beat === 8) this.drum(t, 0.18, 110);
-      if (this.mood.tension && (beat === 6 || beat === 14)) this.drum(t, 0.1, 160);
-      if (!this.mood.tension && beat === 12 && this.rand() < 0.5) this.drum(t, 0.07, 180);
+  /** Ensemble strings: detuned saws, slow bow-like swell and release. */
+  private strings(freq: number, t: number, dur: number, gain: number, cutoff = 2200) {
+    const ctx = this.ctx!;
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = cutoff;
+    f.Q.value = 0.5;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(gain, t + Math.min(1.4, dur * 0.35));
+    g.gain.setValueAtTime(gain, t + dur * 0.75);
+    g.gain.linearRampToValueAtTime(0, t + dur + 0.6);
+    f.connect(g);
+    this.out(g, 0.7);
+    for (const det of [-9, 0, 8]) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = freq;
+      o.detune.value = det;
+      o.connect(f);
+      o.start(t);
+      o.stop(t + dur + 0.7);
+    }
+  }
+
+  /** A short, bowed cello note for the ostinato. */
+  private cello(freq: number, t: number, dur: number, gain: number) {
+    const ctx = this.ctx!;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.value = freq;
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(1500, t);
+    f.frequency.exponentialRampToValueAtTime(500, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(gain, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.08);
+    o.connect(f).connect(g);
+    this.out(g, 0.35);
+    o.start(t);
+    o.stop(t + dur + 0.1);
+  }
+
+  /** French horn: a filtered brass tone that blooms open, with a little vibrato. */
+  private horn(freq: number, t: number, dur: number, gain: number) {
+    const ctx = this.ctx!;
+    const o = ctx.createOscillator();
+    const o2 = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o2.type = 'square';
+    o.frequency.value = freq;
+    o2.frequency.value = freq * 0.998;
+    const vib = ctx.createOscillator();
+    const vibG = ctx.createGain();
+    vib.frequency.value = 4.6;
+    vibG.gain.setValueAtTime(0, t);
+    vibG.gain.linearRampToValueAtTime(freq * 0.004, t + dur * 0.6);
+    vib.connect(vibG);
+    vibG.connect(o.frequency);
+    vibG.connect(o2.frequency);
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.Q.value = 1.2;
+    f.frequency.setValueAtTime(freq * 1.5, t);
+    f.frequency.linearRampToValueAtTime(freq * 4.5, t + 0.25);
+    f.frequency.linearRampToValueAtTime(freq * 3, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(gain, t + 0.12);
+    g.gain.setValueAtTime(gain, t + dur * 0.8);
+    g.gain.linearRampToValueAtTime(0, t + dur + 0.25);
+    const g2 = ctx.createGain();
+    g2.gain.value = 0.35;
+    o.connect(f);
+    o2.connect(g2).connect(f);
+    f.connect(g);
+    this.out(g, 0.8);
+    for (const x of [o, o2, vib]) { x.start(t); x.stop(t + dur + 0.3); }
+  }
+
+  /** Choir "aah": a buzzy source shaped by two vowel formants. */
+  private choir(freq: number, t: number, dur: number, gain: number) {
+    const ctx = this.ctx!;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(gain, t + 1.2);
+    g.gain.setValueAtTime(gain, t + dur * 0.7);
+    g.gain.linearRampToValueAtTime(0, t + dur + 0.8);
+    this.out(g, 1);
+    const formants: Array<[number, number]> = [[750, 1], [1150, 0.55], [2600, 0.18]];
+    const filters = formants.map(([fq, amp]) => {
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = fq;
+      bp.Q.value = 7;
+      const a = ctx.createGain();
+      a.gain.value = amp * 3;
+      bp.connect(a).connect(g);
+      return bp;
+    });
+    for (const det of [-12, 0, 11]) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = freq;
+      o.detune.value = det;
+      const vib = ctx.createOscillator();
+      const vg = ctx.createGain();
+      vib.frequency.value = 4.8 + det * 0.03;
+      vg.gain.value = freq * 0.005;
+      vib.connect(vg).connect(o.frequency);
+      for (const bp of filters) o.connect(bp);
+      for (const x of [o, vib]) { x.start(t); x.stop(t + dur + 0.9); }
     }
   }
 
@@ -407,7 +578,8 @@ class GameAudio {
     g2.gain.value = 0.25;
     o.connect(f);
     o2.connect(g2).connect(f);
-    f.connect(g).connect(this.musicBus!);
+    f.connect(g);
+    this.out(g, 0.6);
     if (echo && this.echo) g.connect(this.echo.delay);
     o.start(t);
     o2.start(t);
@@ -427,11 +599,11 @@ class GameAudio {
     vib.connect(vibG).connect(o.frequency);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.05, t + 0.08);
-    g.gain.setValueAtTime(0.05, t + dur * 0.7);
+    g.gain.linearRampToValueAtTime(0.04, t + 0.08);
+    g.gain.setValueAtTime(0.04, t + dur * 0.7);
     g.gain.linearRampToValueAtTime(0, t + dur);
-    o.connect(g).connect(this.musicBus!);
-    if (this.echo) g.connect(this.echo.delay);
+    o.connect(g);
+    this.out(g, 0.8);
     o.start(t);
     vib.start(t);
     o.stop(t + dur + 0.05);
@@ -449,27 +621,33 @@ class GameAudio {
     return src;
   }
 
-  private drum(t: number, gain: number, freq: number) {
+  /** A war drum: a deep pitched thump with a skin slap, ringing out in the hall. */
+  private taiko(t: number, gain: number, freq: number) {
     const ctx = this.ctx!;
     const o = ctx.createOscillator();
     o.type = 'sine';
-    o.frequency.setValueAtTime(freq, t);
-    o.frequency.exponentialRampToValueAtTime(freq * 0.45, t + 0.18);
+    o.frequency.setValueAtTime(freq * 2.2, t);
+    o.frequency.exponentialRampToValueAtTime(freq, t + 0.06);
+    o.frequency.exponentialRampToValueAtTime(freq * 0.8, t + 0.6);
     const g = ctx.createGain();
-    g.gain.setValueAtTime(gain, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
-    o.connect(g).connect(this.musicBus!);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(gain, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+    o.connect(g);
+    this.out(g, 0.55);
     o.start(t);
-    o.stop(t + 0.3);
-    const n = this.noise(t, 0.06);
+    o.stop(t + 1);
+    const n = this.noise(t, 0.12);
     const nf = ctx.createBiquadFilter();
-    nf.type = 'bandpass';
-    nf.frequency.value = 900;
+    nf.type = 'lowpass';
+    nf.frequency.value = 1400;
     const ng = ctx.createGain();
-    ng.gain.setValueAtTime(gain * 0.25, t);
-    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
-    n.connect(nf).connect(ng).connect(this.musicBus!);
+    ng.gain.setValueAtTime(gain * 0.5, t);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+    n.connect(nf).connect(ng);
+    this.out(ng, 0.5);
   }
+
 
   // --------------------------------------------------------- sound effects
   private canSfx() {
