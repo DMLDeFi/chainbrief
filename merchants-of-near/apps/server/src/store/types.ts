@@ -50,4 +50,9 @@ export interface Store {
   chainTx(hash: string): Promise<ChainTxRecord | null>;
   chainTxsFor(userId: string): Promise<ChainTxRecord[]>;
   close(): Promise<void>;
+
+  /** Serverless (Postgres only): run `fn` while holding a database-wide lock, so instances take turns. */
+  withLock?<T>(fn: () => Promise<T>): Promise<T>;
+  /** Serverless (Postgres only): when the saved world was last written, to spot saves by other instances. */
+  worldStamp?(): Promise<string | null>;
 }

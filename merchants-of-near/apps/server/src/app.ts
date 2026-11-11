@@ -41,6 +41,8 @@ export interface AppDeps {
   game: GameService;
   near: NearService;
   dialogue: MerchantDialogue;
+  /** Serverless (Vercel): no WebSocket stream and no page proxy; clients poll /api/world. */
+  serverless?: boolean;
 }
 
 export async function buildApp(deps: AppDeps) {
@@ -49,7 +51,7 @@ export async function buildApp(deps: AppDeps) {
   await app.register(cookie);
   // Page and asset requests proxied to Next.js are not API calls; only /api and /ws are limited.
   await app.register(rateLimit, { global: true, max: 600, timeWindow: '1 minute', allowList: (req) => !req.url.startsWith('/api') && !req.url.startsWith('/ws') });
-  await app.register(websocket);
+  if (!deps.serverless) await app.register(websocket);
 
   const actionBucket = new TokenBucket(15, 6); // burst 15, 6 actions/sec sustained
   const chatBucket = new TokenBucket(5, 0.2);
@@ -98,9 +100,10 @@ export async function buildApp(deps: AppDeps) {
     if (req.url.startsWith('/audio/') && !isLocalViewer(req)) return reply.code(404).send({ error: 'Not found' });
   });
   app.get('/api/audio/tracks', async (req) => {
-    if (!isLocalViewer(req)) return [];
+    // Hosted serverless there are no local viewers, so no personal music to list.
+    if (deps.serverless || !isLocalViewer(req)) return [];
     try {
-      const files = await fs.readdir(audioDir);
+      const files = await fs.readdir(/*turbopackIgnore: true*/ audioDir);
       return files.filter((f) => /\.(mp3|m4a|aac|ogg|oga|wav|webm)$/i.test(f) && !f.startsWith('.')).sort().map((f) => `/audio/${encodeURIComponent(f)}`);
     } catch {
       return [];
@@ -339,7 +342,7 @@ export async function buildApp(deps: AppDeps) {
   });
 
   // --------------------------------------------------------- websocket ---
-  app.get('/ws', { websocket: true }, (socket) => {
+  if (!deps.serverless) app.get('/ws', { websocket: true }, (socket) => {
     socket.send(JSON.stringify({ type: 'snapshot', data: publicSnapshot(game.world, 0) }));
     const off = game.subscribe((msg) => {
       if (socket.readyState === 1) socket.send(JSON.stringify(msg));

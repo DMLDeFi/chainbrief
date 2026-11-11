@@ -8,7 +8,8 @@
     "start": "tsx src/index.ts",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push"
+    "db:push": "prisma db push",
+    "vercel-db": "node scripts/vercel-db.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",
@@ -26,5 +27,8 @@
     "pg": "^8.23.1",
     "prisma": "^7.10.1",
     "zod": "^4.6.7"
+  },
+  "exports": {
+    "./serverless": "./src/serverless.ts"
   }
 }

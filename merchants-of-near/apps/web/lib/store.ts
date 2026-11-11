@@ -41,7 +41,35 @@ function wsUrl() {
   return location.port === '3000' ? `${proto}://${location.hostname}:4000/ws` : `${proto}://${location.host}/ws`;
 }
 
+let polling = false;
+function applySnapshot(snap: PublicSnapshot) {
+  const known = new Set(state.feed.map((f) => f.id));
+  const fresh = snap.feed.filter((f) => !known.has(f.id));
+  const feed = [...state.feed, ...fresh].slice(-250);
+  set({ world: snap, feed });
+  if (state.me) scheduleMe();
+}
+
+/** Serverless hosting (Vercel) has no WebSocket stream: fetch the world every two seconds instead. */
+function poll() {
+  if (polling || typeof window === 'undefined') return;
+  polling = true;
+  const loop = async () => {
+    if (document.hidden) return void setTimeout(loop, 2000);
+    try {
+      const r = await fetch('/api/world', { cache: 'no-store' });
+      if (r.ok) { applySnapshot((await r.json()) as PublicSnapshot); set({ connected: true }); }
+      else set({ connected: false });
+    } catch {
+      set({ connected: false });
+    }
+    setTimeout(loop, 2000);
+  };
+  void loop();
+}
+
 export function connect() {
+  if (process.env.NEXT_PUBLIC_REALTIME === 'poll') return poll();
   if (ws || typeof window === 'undefined') return;
   const sock = new WebSocket(wsUrl());
   ws = sock;
@@ -54,12 +82,7 @@ export function connect() {
   sock.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
     if (msg.type !== 'snapshot') return;
-    const snap = msg.data as PublicSnapshot;
-    const known = new Set(state.feed.map((f) => f.id));
-    const fresh = snap.feed.filter((f) => !known.has(f.id));
-    const feed = [...state.feed, ...fresh].slice(-250);
-    set({ world: snap, feed });
-    if (state.me) scheduleMe();
+    applySnapshot(msg.data as PublicSnapshot);
   };
 }
 
