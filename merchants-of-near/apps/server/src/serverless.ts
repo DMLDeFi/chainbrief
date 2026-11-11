@@ -58,7 +58,15 @@ export async function handle(request: Request): Promise<Response> {
     return Response.json({ error: (e as Error).message }, { status: 503 });
   }
   const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.text();
-  const run = () => rt.store.withLock(() => serve(rt, request, body));
+  const run = async () => {
+    try {
+      return await rt.store.withLock(() => serve(rt, request, body));
+    } catch (e) {
+      // Shown in Vercel's runtime logs, and to the player, so a failure can be diagnosed.
+      console.error('[merchants-of-near] request failed', request.method, new URL(request.url).pathname, e);
+      return Response.json({ error: `Server error: ${(e as Error).message ?? e}`.slice(0, 300) }, { status: 500 });
+    }
+  };
   const next = queue.then(run, run);
   queue = next.catch(() => undefined);
   return next;
