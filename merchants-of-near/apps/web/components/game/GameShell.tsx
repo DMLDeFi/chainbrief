@@ -7,7 +7,9 @@ import { gameAudio } from '@/lib/audio';
 import type { Selection } from '@/game/TownScene';
 import { TownCanvas, type TownHandle } from '../TownCanvas';
 import { FlyLayer } from './FlyLayer';
-import { IconBag, IconChart, IconCrown, IconGear, IconHouse, IconMedal, IconPeople, IconScale, IconScroll, IconWallet, IconPlus, IconMinus, IconMap, IconEmpire, IconDice, IconHorse } from '../icons';
+import { Minimap } from './Minimap';
+import { Joystick } from './Joystick';
+import { IconBag, IconChart, IconCrown, IconGear, IconHouse, IconMedal, IconPeople, IconScale, IconScroll, IconWallet, IconPlus, IconMinus, IconMap, IconEmpire, IconDice, IconHorse, IconWalk } from '../icons';
 import { TavernPanel } from './panels/TavernPanel';
 import { HippodromePanel } from './panels/HippodromePanel';
 import { ContractsPanel } from './panels/ContractsPanel';
@@ -75,6 +77,22 @@ export function GameShell() {
   const [plotSel, setPlotSel] = useState<Selection | null>(null);
   const [demo, setDemo] = useState(params.get('demo') === '1');
   const town = useRef<TownHandle>(null);
+  // Walk mode: the keys, the joystick and taps move your merchant and the camera follows.
+  const [walking, setWalking] = useState(true);
+  const [near, setNear] = useState<string | null>(null);
+  const [touch, setTouch] = useState(false);
+  useEffect(() => {
+    try { if (localStorage.getItem('mon.walk') === '0') setWalking(false); } catch { /* storage unavailable */ }
+    const mq = window.matchMedia('(pointer: coarse)');
+    setTouch(mq.matches);
+    const on = () => setTouch(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  useEffect(() => {
+    town.current?.setWalkMode(walking);
+    try { localStorage.setItem('mon.walk', walking ? '1' : '0'); } catch { /* storage unavailable */ }
+  }, [walking]);
 
   useEffect(() => {
     if (meLoaded && !me) router.replace(`/register?next=${encodeURIComponent(`/play${demo ? '?demo=1' : ''}`)}`);
@@ -108,6 +126,8 @@ export function GameShell() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest('input,textarea,select')) return;
       if (e.key === 'Escape') setPanel(null);
+      if (e.key === 'c') { setWalking((w) => !w); return; }
+      if (e.key === 'f') { town.current?.enter(); return; }
       const d = DOCK.find((x) => x.key === e.key);
       if (d) open(d.id);
     };
@@ -118,6 +138,7 @@ export function GameShell() {
   const viewCityRef = useRef(viewCity);
   viewCityRef.current = viewCity;
   const onSelect = useCallback((s: Selection) => {
+    if (s.type === 'place') { setPanel('tavern'); return; }
     if (s.type === 'merchant') {
       setMerchantId(s.id);
       setPanel('merchants');
@@ -148,7 +169,7 @@ export function GameShell() {
 
   return (
     <main className="fixed inset-0 overflow-hidden bg-ink" data-cinema={params.has('cinema') ? '' : undefined}>
-      <TownCanvas ref={town} world={world} playerId={me.user.id} onSelect={onSelect} settings={settings} city={viewCity} />
+      <TownCanvas ref={town} world={world} playerId={me.user.id} playerName={me.player.name} onNear={setNear} onSelect={onSelect} settings={settings} city={viewCity} />
       {viewCity !== 'nearhaven' && (
         <div className="pointer-events-auto absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full border border-brass/50 bg-[#140f0b]/90 px-4 py-2 text-sm shadow-lg max-md:bottom-24">
           <span className="display font-bold text-brass-bright">{CITY_DEFS[viewCity].name}</span>
@@ -178,8 +199,28 @@ export function GameShell() {
         ))}
       </nav>
 
+      {/* Minimap */}
+      <div className="pointer-events-none absolute bottom-4 left-16 z-20 max-md:left-auto max-md:right-2 max-md:top-[7.5rem] max-md:bottom-auto">
+        <Minimap town={town} label={CITY_DEFS[viewCity].name} />
+      </div>
+
+      {/* At a door: enter */}
+      {near && walking && (
+        <button onClick={() => town.current?.enter()} className="pointer-events-auto absolute bottom-20 left-1/2 z-20 -translate-x-1/2 rounded-full border border-[#8a5f1c] bg-brass px-5 py-2 text-sm font-bold text-ink shadow-[var(--shadow-glow)] animate-pulse-soft max-md:bottom-[15rem] max-md:max-w-[80vw] max-md:truncate">
+          <span className="mr-2 rounded bg-ink/20 px-1.5 py-0.5 text-xs max-md:hidden">F</span>{near}
+        </button>
+      )}
+
+      {/* Touch: thumbstick */}
+      {touch && walking && !panel && (
+        <div className="absolute bottom-24 left-4 z-20">
+          <Joystick onMove={(x, y) => town.current?.setJoystick(x, y)} />
+        </div>
+      )}
+
       {/* Zoom controls */}
       <div className="absolute bottom-4 right-4 z-20 flex flex-col gap-1.5 max-md:bottom-20">
+        <button className={`panel-glass grid h-10 w-10 place-items-center ${walking ? 'text-brass-bright' : 'text-parchment-dim'} hover:text-brass`} onClick={() => { setWalking((w) => !w); if (!walking) town.current?.findAvatar(); }} title={walking ? 'Walking: keys move your merchant (C for free camera)' : 'Free camera: keys pan the map (C to walk)'} aria-pressed={walking} aria-label="Walk with your merchant"><IconWalk size={18} /></button>
         <button className="panel-glass grid h-10 w-10 place-items-center text-parchment-dim hover:text-brass" onClick={() => town.current?.zoom(1.2)} aria-label="Zoom in"><IconPlus size={18} /></button>
         <button className="panel-glass grid h-10 w-10 place-items-center text-parchment-dim hover:text-brass" onClick={() => town.current?.zoom(0.83)} aria-label="Zoom out"><IconMinus size={18} /></button>
       </div>

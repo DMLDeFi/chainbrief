@@ -1,16 +1,26 @@
 'use client';
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { MARKET_DEFS, type MarketId, type PublicSnapshot } from '@mon/engine';
-import type { Selection, TownScene } from '@/game/TownScene';
+import type { MinimapBase, MinimapLive, Selection, TownScene } from '@/game/TownScene';
 
 export interface TownHandle {
   focus: (s: Selection) => void;
   zoom: (f: number) => void;
+  setWalkMode: (on: boolean) => void;
+  setJoystick: (x: number, y: number) => void;
+  enter: () => void;
+  findAvatar: () => void;
+  goTo: (gx: number, gy: number) => void;
+  minimapBase: () => MinimapBase | null;
+  minimapLive: () => MinimapLive | null;
 }
 
 interface Props {
   world: PublicSnapshot | null;
   playerId: string | null;
+  playerName?: string | null;
+  /** The avatar is at a door (its label), or walked away (null). */
+  onNear?: (label: string | null) => void;
   onSelect?: (s: Selection) => void;
   settings?: { weather: boolean; reducedMotion: boolean };
   interactive?: boolean;
@@ -20,15 +30,22 @@ interface Props {
 }
 
 /** Mounts the Phaser town (client-only) and streams world snapshots into it. */
-export const TownCanvas = forwardRef<TownHandle, Props>(function TownCanvas({ world, playerId, onSelect, settings, interactive = true, className, city = 'nearhaven' }, ref) {
+export const TownCanvas = forwardRef<TownHandle, Props>(function TownCanvas({ world, playerId, playerName, onNear, onSelect, settings, interactive = true, className, city = 'nearhaven' }, ref) {
   const host = useRef<HTMLDivElement>(null);
   const scene = useRef<TownScene | null>(null);
-  const latest = useRef({ world, playerId, onSelect, settings });
-  latest.current = { world, playerId, onSelect, settings };
+  const latest = useRef({ world, playerId, playerName, onNear, onSelect, settings });
+  latest.current = { world, playerId, playerName, onNear, onSelect, settings };
 
   useImperativeHandle(ref, () => ({
     focus: (s) => scene.current?.focusOn(s),
     zoom: (f) => scene.current?.zoomBy(f),
+    setWalkMode: (on) => scene.current?.setWalkMode(on),
+    setJoystick: (x, y) => scene.current?.setJoystick(x, y),
+    enter: () => scene.current?.enterNearby(),
+    findAvatar: () => scene.current?.findAvatar(),
+    goTo: (gx, gy) => scene.current?.goTo(gx, gy),
+    minimapBase: () => (scene.current?.sys.isActive() ? scene.current.minimapBase() : null),
+    minimapLive: () => (scene.current?.sys.isActive() ? scene.current.minimapLive() : null),
   }));
 
   useEffect(() => {
@@ -57,6 +74,8 @@ export const TownCanvas = forwardRef<TownHandle, Props>(function TownCanvas({ wo
         callbacks: {
           onSelect: (sel: Selection) => latest.current.onSelect?.(sel),
           getPlayerId: () => latest.current.playerId,
+          getPlayerName: () => latest.current.playerName ?? null,
+          onNear: (label: string | null) => latest.current.onNear?.(label),
           getSettings: () => latest.current.settings ?? { weather: true, reducedMotion: false },
         },
         cinematic: !interactive,
