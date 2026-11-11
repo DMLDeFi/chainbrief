@@ -13,6 +13,8 @@ export interface TownHandle {
   goTo: (gx: number, gy: number) => void;
   minimapBase: () => MinimapBase | null;
   minimapLive: () => MinimapLive | null;
+  holdCitizen: (i: number | null) => void;
+  portrait: (i: number) => string | null;
 }
 
 interface Props {
@@ -46,6 +48,8 @@ export const TownCanvas = forwardRef<TownHandle, Props>(function TownCanvas({ wo
     goTo: (gx, gy) => scene.current?.goTo(gx, gy),
     minimapBase: () => (scene.current?.sys.isActive() ? scene.current.minimapBase() : null),
     minimapLive: () => (scene.current?.sys.isActive() ? scene.current.minimapLive() : null),
+    holdCitizen: (i) => scene.current?.holdCitizen(i),
+    portrait: (i) => scene.current?.portrait(i) ?? null,
   }));
 
   useEffect(() => {
