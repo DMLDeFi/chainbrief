@@ -11,6 +11,10 @@ wallet, and other players can buy those deeds for NEAR.
 
 Built for the NEAR Hackathon 2026.
 
+**▶ Play free in your browser: [merchants-of-near-game.vercel.app](https://merchants-of-near-game.vercel.app)**. Sign up with a name and password; a NEAR wallet is optional.
+
+**Videos:** [How to Play (1:33)](https://github.com/DMLDeFi/chainbrief/blob/videos/5-how-to-play-1080p.mp4) · [New Features trailer](https://github.com/DMLDeFi/chainbrief/blob/videos/4-new-features-trailer-1080p.mp4) · [World Expansion trailer](https://github.com/DMLDeFi/chainbrief/blob/videos/3-world-expansion-trailer-1080p.mp4)
+
 ![Architecture](docs/architecture.svg)
 
 ---
@@ -96,20 +100,26 @@ One machine runs the game server and the Next.js app behind a single HTTPS origi
 
 ## How to play
 
+New players get **the Merchant's Path**: nine first steps on screen (first deal, first profit, a guild, a contract, a business, a trading office abroad…), each with a **Go** button that opens the right screen and a small reward.
+
 | | |
 |---|---|
-| **Trade** | Buy and sell 11 goods on the Nearhaven Exchange. Your orders move the price. Port Aurora unlocks at Level 4 or with a Trading Company. |
-| **Read the merchants** | Open any merchant to see personality, objectives, inventory, ask/bid prices, decision log, transaction memory and P&L. Negotiate private deals, invest in their equity, chat. |
-| **Build businesses** | Farm, Bakery, Textile Shop, Blacksmith, Warehouse, Trading Company. Each has a price, capacity, workers, wages, upkeep, inventory, upgrades, automation policies and a daily P&L. |
-| **Finance** | Borrow from Banker Aldric (credit-scored), repay early or automatically, invest in merchants for dividends (and lose it all if they go bankrupt). |
-| **Progress** | 6 ranks (Street Trader → Master Merchant) gated by XP, net worth, businesses and reputation; 14 achievements; 3 daily missions and 2 weekly challenges per player. |
-| **Compete** | Leaderboards for wealth, trading volume, achievements and business profit (humans only), plus a separate AI-merchant ranking. Player-to-player marketplace with server escrow. |
-| **Own it on NEAR** | Wallet login, business deeds, deed marketplace in NEAR, soulbound achievement badges. |
-| **Fast-forward** | Simulate 1–14 days instantly from the HUD. |
+| **Walk your town** | Your own merchant walks the streets: WASD/arrows (Shift to run), tap the ground, or the joystick on phones. Buildings and the river block the way; taps find a path around them. Walk up to the exchange, a workshop, the tavern or a plot and press **F** to go in. A minimap shows the whole town. **C** switches to a free camera. |
+| **Trade** | Buy and sell goods on six city exchanges. Your orders move the price. Carry goods between cities by caravan and sell where they are dear. |
+| **Talk to the townsfolk** | Every townsperson has a name, trade, temperament and a mood that follows the town (food, weather, events). Ask them for deals (real price gaps between cities), jobs, race tips, guild news and gossip. |
+| **Read the merchants** | Ten AI merchants with personality, goals, inventory, a decision log, memory and P&L. Negotiate private deals, invest in their equity, chat. |
+| **Contracts** (J) | Cities post delivery jobs priced from their own markets and paid from their treasuries: deliver on time for gold, reputation and XP; fail and lose reputation. |
+| **Build businesses** | 19 kinds across 8 supply chains, with workers, wages, upkeep, upgrades and automation. Towns grow new districts as they prosper. |
+| **Guilds & seasons** (G) | Join one of four guilds. Trading profit, contracts, new businesses and public gifts score for it. Each 56-day season crowns the winning guild's members and the top merchant. |
+| **The Gilded Tankard** (T) | Merchant's Dice against the innkeeper and Find the Coin, for in-game gold only. |
+| **The Hippodrome** (H) | A horse race every 12 game hours: bet at posted odds, watch the replay. Stakes and winnings pass through a city treasury, so no gold is created. |
+| **Finance** | Borrow from Banker Aldric (credit-scored), repay early or automatically, invest in merchants for dividends. |
+| **Progress & compete** | Ten ranks (Street Trader → Economic Powerhouse), achievements, daily missions and weekly challenges, leaderboards, and a player-to-player marketplace with server escrow. |
+| **Own it on NEAR** | Wallet login, business deeds, a deed marketplace in NEAR, soulbound achievement badges. |
 
-**Music and sound:** the game ships with an original soundtrack composed live in the browser (Web Audio). Lute-like plucks, a drone and a frame drum change with the time of day, the season and active events. Sound effects cover trades, level-ups and new events. Sound starts on the first tap or click (a browser rule) and works on phones. To play your own music while testing locally, drop `.mp3`/`.m4a`/`.ogg`/`.wav` files into `apps/web/public/audio/`. That folder is gitignored and excluded from the Docker image, so personal tracks are never committed or deployed. The server also offers them only to viewers on the same machine or local network. Visitors arriving through a public tunnel or host hear the original soundtrack.
+**Music and sound:** the game ships with an original epic soundtrack composed for it and played live in the browser (Web Audio): low strings, a cello ostinato, war drums, a horn theme, choir and harp in a generated concert hall. It follows the world: a brooding half and a heroic half by day, hushed strings, choir and harp at night, faster and darker music during events. Sound effects cover trades, level-ups and new events. Sound starts on the first tap or click (a browser rule) and works on phones. To play your own music while testing locally, drop `.mp3`/`.m4a`/`.ogg`/`.wav` files into `apps/web/public/audio/`. That folder is gitignored and excluded from the Docker image, so personal tracks are never committed or deployed. The server also offers them only to viewers on the same machine or local network. Visitors arriving through a public tunnel or host hear the original soundtrack.
 
-Controls: drag or WASD/arrow keys to pan, wheel or Q/E to zoom, number keys 1–0 open panels, Esc closes.
+Controls: WASD/arrow keys or a tap walk your merchant (C for a free camera, where WASD pans), F enters a building or talks to a townsperson, drag to look around, wheel or Q/E to zoom, J/G/T/H open contracts, guilds, tavern and Hippodrome, number keys 1–0 open the other panels, Esc closes.
 
 ---
 
