@@ -86,7 +86,11 @@ export const TownCanvas = forwardRef<TownHandle, Props>(function TownCanvas({ wo
       });
       scene.current = s;
       // Cinema mode (?cinema=1): expose the scene so trailer/screenshot scripts can direct it.
-      if (new URLSearchParams(location.search).has('cinema')) (window as unknown as { __monTown?: TownScene }).__monTown = s;
+      if (new URLSearchParams(location.search).has('cinema')) {
+        (window as unknown as { __monTown?: TownScene }).__monTown = s;
+        // ...and the soundtrack, so capture scripts can set its mood and record it.
+        (window as unknown as { __monAudio?: unknown }).__monAudio = (await import('@/lib/audio')).gameAudio;
+      }
       if (latest.current.world) s.setWorld(latest.current.world);
       if (!interactive) game.input.enabled = false;
     })();
