@@ -1,4 +1,7 @@
 import {
+  acceptContract,
+  deliverContract,
+  abandonContract,
   addRoute,
   assignBusiness,
   bankDeposit,
@@ -74,6 +77,9 @@ export const ActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('bank.deposit'), businessId: id, amount: z.number().int().min(-1_000_000).max(1_000_000) }),
   z.object({ type: z.literal('city.fund'), city, project: z.enum(INFRA_KINDS as [InfraKind, ...InfraKind[]]), amount: z.number().int().min(10).max(100000) }),
   z.object({ type: z.literal('route.toggle'), routeId: id, active: z.boolean() }),
+  z.object({ type: z.literal('contract.accept'), contractId: id }),
+  z.object({ type: z.literal('contract.deliver'), contractId: id }),
+  z.object({ type: z.literal('contract.abandon'), contractId: id }),
   z.object({ type: z.literal('business.sell'), businessId: id }),
   z.object({ type: z.literal('land.buy'), city }),
   z.object({ type: z.literal('land.sell'), city }),
@@ -346,6 +352,15 @@ export class GameService {
         break;
       case 'deal':
         r = proposeDeal(w, userId, action);
+        break;
+      case 'contract.accept':
+        r = acceptContract(w, userId, action.contractId);
+        break;
+      case 'contract.deliver':
+        r = deliverContract(w, userId, action.contractId);
+        break;
+      case 'contract.abandon':
+        r = abandonContract(w, userId, action.contractId);
         break;
       case 'mission.claim': {
         const c = claimMission(w, p, action.missionId);

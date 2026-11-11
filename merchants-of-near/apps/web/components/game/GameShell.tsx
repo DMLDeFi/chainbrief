@@ -8,6 +8,7 @@ import type { Selection } from '@/game/TownScene';
 import { TownCanvas, type TownHandle } from '../TownCanvas';
 import { FlyLayer } from './FlyLayer';
 import { IconBag, IconChart, IconCrown, IconGear, IconHouse, IconMedal, IconPeople, IconScale, IconScroll, IconWallet, IconPlus, IconMinus, IconMap, IconEmpire } from '../icons';
+import { ContractsPanel } from './panels/ContractsPanel';
 import { EmpirePanel } from './panels/EmpirePanel';
 import { WorldMap } from './WorldMap';
 import { CITY_DEFS, CITY_IDS, type MarketId } from '@mon/engine';
@@ -26,11 +27,12 @@ import { WalletPanel } from './panels/WalletPanel';
 import { SettingsPanel } from './panels/SettingsPanel';
 import { DemoGuide } from './DemoGuide';
 
-export type PanelId = 'world' | 'empire' | 'market' | 'inventory' | 'merchants' | 'business' | 'economy' | 'ledger' | 'leaderboard' | 'achievements' | 'wallet' | 'settings';
+export type PanelId = 'world' | 'empire' | 'contracts' | 'market' | 'inventory' | 'merchants' | 'business' | 'economy' | 'ledger' | 'leaderboard' | 'achievements' | 'wallet' | 'settings';
 
 const DOCK: Array<{ id: PanelId; label: string; icon: React.ReactNode; key: string }> = [
   { id: 'world', label: 'World Map', icon: <IconMap />, key: 'm' },
   { id: 'empire', label: 'Empire', icon: <IconEmpire />, key: 'e' },
+  { id: 'contracts', label: 'Contracts', icon: <IconScroll />, key: 'j' },
   { id: 'market', label: 'Marketplace', icon: <IconScale />, key: '1' },
   { id: 'inventory', label: 'Inventory', icon: <IconBag />, key: '2' },
   { id: 'merchants', label: 'Merchants', icon: <IconPeople />, key: '3' },
@@ -184,6 +186,7 @@ export function GameShell() {
         <div className="pointer-events-none absolute inset-y-0 left-16 z-30 flex items-stretch py-20 pl-2 pr-4 max-md:inset-x-0 max-md:left-0 max-md:px-2 max-md:pb-20 max-md:pt-24 md:right-[340px]">
           {panel === 'world' && <WorldMap world={world} me={me} viewCity={marketCity} onClose={() => setPanel(null)} onVisit={(c) => { setMarketCity(c); setPanel('market'); }} onWalk={walk} />}
           {panel === 'empire' && <EmpirePanel world={world} me={me} onClose={() => setPanel(null)} />}
+          {panel === 'contracts' && <ContractsPanel world={world} me={me} onClose={() => setPanel(null)} />}
           {panel === 'market' && <MarketPanel world={world} me={me} city={marketCity} onClose={() => setPanel(null)} />}
           {panel === 'inventory' && <InventoryPanel world={world} me={me} onClose={() => setPanel(null)} onOpen={open} />}
           {panel === 'merchants' && <MerchantsPanel world={world} me={me} selected={merchantId} onSelect={showMerchant} onBack={() => setMerchantId(null)} onClose={() => setPanel(null)} />}

@@ -299,7 +299,8 @@ export type MetricKey =
   | 'negotiations'
   | 'netWorth'
   | 'businesses'
-  | 'workers';
+  | 'workers'
+  | 'contracts';
 
 export interface MissionProgress {
   def: MissionDef;
@@ -457,6 +458,8 @@ export interface WorldState {
   shipments: Record<string, Shipment>;
   /** Open acquisition offers between players. */
   offers: Record<string, AcquisitionOffer>;
+  /** Delivery jobs posted by towns and merchants (see contracts.ts). */
+  contracts?: Record<string, import('./contracts').DeliveryContract>;
 }
 
 export type Result<T> = { ok: true; data: T } | { ok: false; error: string };

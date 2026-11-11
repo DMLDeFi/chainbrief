@@ -18,3 +18,4 @@ export * from './property';
 export * from './civic';
 export * from './corporate';
 export * from './bizIndex';
+export * from './contracts';
