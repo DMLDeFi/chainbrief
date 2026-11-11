@@ -1,4 +1,5 @@
 import {
+  joinGuild,
   acceptContract,
   deliverContract,
   abandonContract,
@@ -80,6 +81,7 @@ export const ActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('contract.accept'), contractId: id }),
   z.object({ type: z.literal('contract.deliver'), contractId: id }),
   z.object({ type: z.literal('contract.abandon'), contractId: id }),
+  z.object({ type: z.literal('guild.join'), guild: z.enum(['scale', 'anvil', 'sheaf', 'compass']) }),
   z.object({ type: z.literal('business.sell'), businessId: id }),
   z.object({ type: z.literal('land.buy'), city }),
   z.object({ type: z.literal('land.sell'), city }),
@@ -361,6 +363,9 @@ export class GameService {
         break;
       case 'contract.abandon':
         r = abandonContract(w, userId, action.contractId);
+        break;
+      case 'guild.join':
+        r = joinGuild(w, userId, action.guild);
         break;
       case 'mission.claim': {
         const c = claimMission(w, p, action.missionId);

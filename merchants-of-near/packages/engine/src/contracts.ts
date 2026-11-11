@@ -1,3 +1,4 @@
+import { awardPoints } from './guilds';
 import { MARKETS, RESOURCES, RESOURCE_DEFS, TIME, type MarketId, type Resource } from './config';
 import { CITY_DEFS } from './cities';
 import type { PlayerState, Result, WorldState } from './types';
@@ -102,7 +103,9 @@ export function postContracts(w: WorldState): void {
       const affordable = Math.floor(cap / (price * premium) / 5) * 5;
       if (affordable < 5) continue;
       const wanted = Math.round(randRange(w, 10, 36) * Math.min(1.6, 6 / Math.max(2, price)) / 5) * 5;
-      const qty = clamp(wanted, 5, affordable);
+      // A starter job must be fillable with a newcomer's 100 gold (buying moves the price, so leave room).
+      const starterMax = starterNeeded ? Math.max(5, Math.floor(65 / price / 5) * 5) : Infinity;
+      const qty = clamp(Math.min(wanted, starterMax), 5, affordable);
       const reward = money(qty * price * premium);
       if (reward < 10) continue;
       const usedIssuers = new Set(here.map((c) => c.issuer));
@@ -155,6 +158,7 @@ export function deliverContract(w: WorldState, playerId: string, id: unknown): R
   p.reputation = clamp(p.reputation + c.rep, 0, 100);
   p.xp += c.xp;
   bumpMetric(p, 'contracts', 1);
+  awardPoints(w, p, c.reward);
   c.status = 'done';
   c.doneTick = w.tick;
   w.ledger.push({ tick: w.tick, playerId, type: 'contract.deliver', goldDelta: c.reward, items: { [c.resource]: -c.qty }, details: { contractId: c.id, city: c.city, issuer: c.issuer } });
