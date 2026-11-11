@@ -121,7 +121,7 @@ export class TownScene extends Phaser.Scene {
   private zoomAnchor: { sx: number; sy: number } | null = null;
   private cinematic = false;
   /** Director overrides for trailers and screenshots (cinema mode only). */
-  private director: { hour: number | null; weather: string | null; season: string | null; scripted: boolean; labels: boolean } = { hour: null, weather: null, season: null, scripted: false, labels: true };
+  private director: { hour: number | null; weather: string | null; season: string | null; scripted: boolean; labels: boolean; avatar: boolean } = { hour: null, weather: null, season: null, scripted: false, labels: true, avatar: false };
   private cineT = 0;
   private lastMerchantTrade = new Map<string, number>();
   private prevPrices: Record<string, number> = {};
@@ -161,7 +161,7 @@ export class TownScene extends Phaser.Scene {
    * game's own renderer — script the camera, pick the hour, weather and season.
    * It never touches the simulation; it only changes what this client draws.
    */
-  direct(opts: Partial<{ hour: number | null; weather: string | null; season: string | null; scripted: boolean; labels: boolean }>) {
+  direct(opts: Partial<{ hour: number | null; weather: string | null; season: string | null; scripted: boolean; labels: boolean; avatar: boolean }>) {
     Object.assign(this.director, opts);
     if (opts.season !== undefined) this.season = '';
     if (this.snap) this.applySnapshot(this.snap);
@@ -847,7 +847,8 @@ export class TownScene extends Phaser.Scene {
       if (!id || this.cinematic) return;
       a.create(id, this.cb.getPlayerName?.() ?? 'You');
     }
-    a.setVisible(!this.cinematic && !this.director.scripted);
+    // Scripted (trailer) shots hide the avatar unless the director asks for it.
+    a.setVisible(!this.cinematic && (!this.director.scripted || this.director.avatar));
     const typing = typeof document !== 'undefined' && !!document.activeElement?.closest('input, textarea, select, [contenteditable="true"]');
     const k = this.keys;
     const keys = { x: 0, y: 0, run: false };
