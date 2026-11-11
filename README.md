@@ -5,6 +5,9 @@
 | `1-launch-video-1080p.mp4` | Launch video, 16:9, 52 s |
 | `2-part1-vertical-tiktok.mp4` | "Part 1: The Merchant", vertical 9:16 for TikTok / Reels / Shorts |
 | `3-world-expansion-trailer-1080p.mp4` | Cinematic World Expansion trailer, 16:9, 60 s |
+| `4-new-features-trailer-1080p.mp4` | New Features trailer: walking, townsfolk, contracts, guilds, tavern, Hippodrome, Merchant's Path; 16:9, 62 s |
+| `4-new-features-trailer-1080p-subtitled.mp4` | The same, with burned-in subtitles |
+| `epic-soundtrack-preview.mp3` | 2-minute preview of the game's original epic soundtrack |
 
 Click a file, then the download button (↓) at the top right.
 
