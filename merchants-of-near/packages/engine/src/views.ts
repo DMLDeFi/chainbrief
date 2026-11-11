@@ -1,4 +1,5 @@
 import { racesView } from './games';
+import { milestonesView } from './milestones';
 import { guildsView, playerGuildView } from './guilds';
 import { contractsView } from './contracts';
 import { MARKETS, RESOURCES, TIME, type MarketId } from './config';
@@ -174,6 +175,8 @@ export function playerView(world: WorldState, playerId: string) {
     levelTitle: levelTitle(p.level),
     nextLevel: nextLevelRequirements(p),
     guild: playerGuildView(world, p),
+    /** The new merchant's first steps. */
+    path: milestonesView(world, p),
     capacity: playerCapacity(world, playerId),
     used: Math.round(invTotal(p.inventory) * 10) / 10,
     warehouseExpansionCost: warehouseExpansionCost(p),

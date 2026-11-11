@@ -300,7 +300,8 @@ export type MetricKey =
   | 'netWorth'
   | 'businesses'
   | 'workers'
-  | 'contracts';
+  | 'contracts'
+  | 'games';
 
 export interface MissionProgress {
   def: MissionDef;

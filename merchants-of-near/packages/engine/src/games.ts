@@ -1,6 +1,7 @@
 import { TIME } from './config';
 import type { Result, WorldState } from './types';
 import { clamp, fail, money, ok, pushFeed } from './internal';
+import { bumpMetric } from './progression';
 
 /**
  * Tavern games and the hippodrome, played for in-game gold only.
@@ -38,6 +39,7 @@ function settle(w: WorldState, playerId: string, stake: number, win: number, gam
   p.gold = money(p.gold - stake + win);
   m.treasury = money(m.treasury + stake - win);
   w.ledger.push({ tick: w.tick, playerId, type: `game.${game}`, goldDelta: money(win - stake), details });
+  bumpMetric(p, 'games', 1);
 }
 
 const d6 = (roll: Roll) => 1 + Math.floor(roll() * 6);
@@ -124,6 +126,7 @@ export function betOnRace(w: WorldState, playerId: string, horse: unknown, stake
   p.gold = money(p.gold - s.data);
   m.treasury = money(m.treasury + s.data);
   race.bets.push({ playerId, horse, stake: s.data });
+  bumpMetric(p, 'games', 1);
   w.ledger.push({ tick: w.tick, playerId, type: 'game.race.bet', goldDelta: -s.data, details: { race: race.number, horse } });
   return ok({ race: race.number, horse, stake: s.data });
 }

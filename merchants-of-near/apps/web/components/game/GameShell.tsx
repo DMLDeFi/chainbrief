@@ -8,6 +8,7 @@ import type { Selection } from '@/game/TownScene';
 import { TownCanvas, type TownHandle } from '../TownCanvas';
 import { FlyLayer } from './FlyLayer';
 import { Minimap } from './Minimap';
+import { MerchantPath } from './MerchantPath';
 import { Joystick } from './Joystick';
 import { IconBag, IconChart, IconCrown, IconGear, IconHouse, IconMedal, IconPeople, IconScale, IconScroll, IconWallet, IconPlus, IconMinus, IconMap, IconEmpire, IconDice, IconHorse, IconWalk } from '../icons';
 import { TavernPanel } from './panels/TavernPanel';
@@ -193,6 +194,13 @@ export function GameShell() {
       <div className="vignette absolute inset-0" />
 
       <Hud world={world} me={me} onOpen={open} connected={connected} />
+
+      {/* New merchants: the first steps, until they are all done */}
+      {!panel && !demo && (
+        <div className="pointer-events-none absolute left-16 top-24 z-20 max-md:left-2 max-md:top-[5.5rem] max-md:[&>section]:w-[calc(100vw-172px)]">
+          <MerchantPath me={me} onOpen={open} />
+        </div>
+      )}
 
       {/* Dock */}
       <nav className="pointer-events-auto absolute left-3 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-1.5 max-md:bottom-3 max-md:left-1/2 max-md:top-auto max-md:-translate-x-1/2 max-md:translate-y-0 max-md:flex-row max-md:overflow-x-auto max-md:max-w-[calc(100vw-24px)]" aria-label="Game panels">
