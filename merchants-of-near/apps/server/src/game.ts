@@ -118,7 +118,54 @@ export class GameService {
   private dirty = false;
   private saving = false;
 
-  constructor(private store: Store, private opts: { seed: number; tickMs: number }) {}
+  /**
+   * `manual`: no timer and no background saves. The serverless runtime advances
+   * the world itself (catchUp) and saves at the end of each request (flush).
+   */
+  constructor(private store: Store, private opts: { seed: number; tickMs: number; manual?: boolean }) {}
+
+  /** Wall-clock time of the last simulated tick (kept in the world so every instance agrees). */
+  private get clock(): number {
+    return (this.world as WorldState & { wallClock?: number }).wallClock ?? 0;
+  }
+  private set clock(ms: number) {
+    (this.world as WorldState & { wallClock?: number }).wallClock = ms;
+  }
+
+  /**
+   * Serverless: run the ticks that real time says are due since the last one.
+   * Long gaps (nobody online) are not replayed: the world resumes after at most
+   * `maxTicks`, so it pauses while empty instead of racing to catch up.
+   */
+  catchUp(nowMs: number, maxTicks = 15): number {
+    if (!this.clock) this.clock = nowMs;
+    const due = Math.floor((nowMs - this.clock) / this.opts.tickMs);
+    if (due <= 0) return 0;
+    const n = Math.min(due, maxTicks);
+    this.tick(n);
+    this.clock = due > maxTicks ? nowMs : this.clock + n * this.opts.tickMs;
+    return n;
+  }
+
+  /** Serverless: save the ledger, and the world snapshot when asked. */
+  async flush(snapshot: boolean): Promise<void> {
+    const entries = this.world.ledger.splice(0, this.world.ledger.length);
+    if (entries.length) await this.store.appendLedger(entries);
+    if (snapshot) {
+      await this.store.saveWorld(this.world);
+      this.dirty = false;
+    }
+  }
+
+  /** Serverless: reload the world after another instance saved a newer one. */
+  async reload(): Promise<void> {
+    await this.init();
+  }
+
+  private autoPersist(snapshot: boolean): void {
+    if (this.opts.manual) return;
+    void this.persist(snapshot);
+  }
 
   async init(): Promise<void> {
     const saved = await this.store.loadWorld();
@@ -145,6 +192,7 @@ export class GameService {
   }
 
   private broadcast(): void {
+    if (!this.listeners.size) return;
     const snap = publicSnapshot(this.world, this.lastFeedId);
     this.lastFeedId = this.world.feed.at(-1)?.id ?? this.lastFeedId;
     const msg = { type: 'snapshot', data: snap };
@@ -156,7 +204,7 @@ export class GameService {
     else advanceWorld(this.world, n);
     this.dirty = true;
     this.broadcast();
-    void this.persist(this.world.tick % 24 === 0);
+    this.autoPersist(this.world.tick % 24 === 0);
   }
 
   /** Fast-forward the shared world by whole days. */
@@ -164,7 +212,7 @@ export class GameService {
     const fromTick = this.world.tick;
     const before = this.world.nextFeedId;
     this.tick(days * 24);
-    void this.persist(true); // a jump can skip the periodic save points
+    this.autoPersist(true); // a jump can skip the periodic save points
     return { fromTick, toTick: this.world.tick, feed: this.world.nextFeedId - before };
   }
 
@@ -189,7 +237,7 @@ export class GameService {
   ensurePlayer(userId: string, name: string): Result<unknown> {
     if (this.world.players[userId]) return { ok: true, data: this.world.players[userId] };
     const r = registerPlayer(this.world, userId, name);
-    void this.persist(true);
+    this.autoPersist(true);
     return r;
   }
 
@@ -308,7 +356,7 @@ export class GameService {
     if (r.ok) {
       evaluateProgression(w, p);
       this.dirty = true;
-      void this.persist(false);
+      this.autoPersist(false);
     }
     return r;
   }

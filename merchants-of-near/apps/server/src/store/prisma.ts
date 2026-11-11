@@ -125,4 +125,16 @@ export class PrismaStore implements Store {
   async close() {
     await this.db.$disconnect();
   }
+  async withLock<T>(fn: () => Promise<T>): Promise<T> {
+    // A transaction-scoped advisory lock: released automatically when the transaction ends,
+    // and safe behind a transaction-mode connection pooler (such as Neon's).
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(727001)::text`;
+      return fn();
+    }, { maxWait: 25_000, timeout: 55_000 });
+  }
+  async worldStamp() {
+    const row = await this.db.worldSnapshot.findUnique({ where: { id: 'main' }, select: { updatedAt: true } });
+    return row ? row.updatedAt.toISOString() : null;
+  }
 }

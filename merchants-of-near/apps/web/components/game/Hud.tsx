@@ -21,6 +21,17 @@ export function Hud({ world, me, onOpen, connected }: { world: PublicSnapshot; m
   const soundOn = audio.settings.music || audio.settings.sfx;
   const next = p.nextLevel;
   const xpPct = next ? Math.min(1, p.xp / next.xp) : 1;
+  // Every requirement for the next level, so the player can see what is holding them back.
+  const fmtN = (n: number) => Math.floor(n).toLocaleString('en-US');
+  const missing = next
+    ? [
+        { label: 'XP', have: p.xp, need: next.xp },
+        { label: 'net worth', have: p.netWorth, need: next.netWorth },
+        { label: 'businesses', have: p.businesses.length, need: next.businesses },
+        { label: 'reputation', have: p.reputation, need: next.reputation },
+        ...(next.cities ? [{ label: 'cities', have: p.citiesWithBusiness, need: next.cities }] : []),
+      ].filter((r) => r.have < r.need)
+    : [];
 
   const fastForward = async (days: number) => {
     setFfOpen(false);
@@ -51,6 +62,11 @@ export function Hud({ world, me, onOpen, connected }: { world: PublicSnapshot; m
             </div>
             <span className="num whitespace-nowrap text-[10px] text-muted">{p.xp}{next ? ` / ${next.xp}` : ''} XP</span>
           </div>
+          {next && missing.length > 0 && (
+            <div className="mt-1 max-w-[260px] text-[10px] leading-snug text-brass max-sm:hidden">
+              Level {p.level + 1} needs: {missing.map((r) => `${r.label} ${fmtN(r.have)}/${fmtN(r.need)}`).join(' · ')}
+            </div>
+          )}
         </button>
       </div>
 
