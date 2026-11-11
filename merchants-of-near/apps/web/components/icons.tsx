@@ -95,3 +95,5 @@ export function Logo({ size = 36 }: { size?: number }) {
     </svg>
   );
 }
+export const IconDice = line('M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Zm3.5 4h.01M15.5 8h.01M12 12h.01M8.5 16h.01M15.5 16h.01');
+export const IconHorse = line('M5 20l2-6c-1-2 0-5 3-6l2-4 1 3c3 0 6 2 6 6v7M10 8l-4 3 1 2M14 20v-4');

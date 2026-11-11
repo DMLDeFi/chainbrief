@@ -1,5 +1,9 @@
 import {
   joinGuild,
+  playDice,
+  playCups,
+  betOnRace,
+  racesTick,
   acceptContract,
   deliverContract,
   abandonContract,
@@ -82,6 +86,9 @@ export const ActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('contract.deliver'), contractId: id }),
   z.object({ type: z.literal('contract.abandon'), contractId: id }),
   z.object({ type: z.literal('guild.join'), guild: z.enum(['scale', 'anvil', 'sheaf', 'compass']) }),
+  z.object({ type: z.literal('game.dice'), stake: z.number().int().min(1).max(1000) }),
+  z.object({ type: z.literal('game.cups'), stake: z.number().int().min(1).max(1000), pick: z.number().int().min(0).max(2) }),
+  z.object({ type: z.literal('game.race'), stake: z.number().int().min(1).max(1000), horse: z.number().int().min(0).max(11) }),
   z.object({ type: z.literal('business.sell'), businessId: id }),
   z.object({ type: z.literal('land.buy'), city }),
   z.object({ type: z.literal('land.sell'), city }),
@@ -210,6 +217,8 @@ export class GameService {
   tick(n: number): void {
     if (n === 1) stepWorld(this.world);
     else advanceWorld(this.world, n);
+    // Races are drawn with the server's randomness, outside the deterministic simulation.
+    racesTick(this.world);
     this.dirty = true;
     this.broadcast();
     this.autoPersist(this.world.tick % 24 === 0);
@@ -366,6 +375,15 @@ export class GameService {
         break;
       case 'guild.join':
         r = joinGuild(w, userId, action.guild);
+        break;
+      case 'game.dice':
+        r = playDice(w, userId, action.stake);
+        break;
+      case 'game.cups':
+        r = playCups(w, userId, action.stake, action.pick);
+        break;
+      case 'game.race':
+        r = betOnRace(w, userId, action.horse, action.stake);
         break;
       case 'mission.claim': {
         const c = claimMission(w, p, action.missionId);
