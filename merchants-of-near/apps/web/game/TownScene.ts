@@ -7,12 +7,14 @@ import { SPECS, drawBuilding, houseSpec, type BuildingArt } from './art/building
 import { LOOKS, buildCharacter, citizenLook } from './art/characters';
 import { RESOURCE_COLOR, makePropTextures } from './art/props';
 import { Avatar, toGrid, type Place } from './avatar';
+import { citizenProfile } from '@/lib/townsfolk';
 
 export type Selection =
   | { type: 'merchant'; id: string }
   | { type: 'exchange' }
   | { type: 'plot'; plot: number; city?: string; businessId?: string; ownerId?: string }
-  | { type: 'place'; id: 'tavern' };
+  | { type: 'place'; id: 'tavern' }
+  | { type: 'citizen'; index: number };
 
 /** What the minimap draws: the ground once, and the moving parts several times a second. */
 export interface MinimapBase { x0: number; y0: number; x1: number; y1: number; cells: string; blocks: Array<{ gx: number; gy: number; w: number; d: number; color: string }> }
@@ -136,6 +138,9 @@ export class TownScene extends Phaser.Scene {
   private walkMode = true;
   private places: Array<Place<Selection>> = [];
   private blockedPlots: Array<{ gx: number; gy: number }> = [];
+  /** The townsperson the player is talking to: they stop and face the avatar. */
+  private talking: number | null = null;
+  private talkBubble?: Phaser.GameObjects.Text;
 
   constructor() {
     super('town');
@@ -639,6 +644,11 @@ export class TownScene extends Phaser.Scene {
       const p = iso(home.gx, home.gy);
       const skin = `citizen-${i % 12}`;
       const sprite = this.add.sprite(p.x, p.y, skin, 'idle0').setOrigin(0.5, 37 / 40).setScale(0.88);
+      const who = citizenProfile(i, CITY_ID);
+      sprite.setInteractive({ useHandCursor: true });
+      sprite.on('pointerover', () => { sprite.setTint(0xfff1cf); this.hoverLabel.setText(`${who.name} · ${who.trade} — talk`).setVisible(true); });
+      sprite.on('pointerout', () => { sprite.clearTint(); this.hoverLabel.setVisible(false); });
+      sprite.on('pointerup', (ptr: Phaser.Input.Pointer) => this.dragDist < 8 && this.onCanvas(ptr) && sprite.alpha > 0.5 && this.cb.onSelect({ type: 'citizen', index: i }));
       const c: Npc = { sprite, key: skin, path: [], speed: 16 + Math.random() * 14, home: p, wait: Math.random() * 3, anim: 'idle', carrying: Math.random() < 0.3, cheerUntil: 0, workTimer: 0, working: false,
         routine: { home, work: { gx: job.gx, gy: job.gy }, plot: (job as { plot?: number }).plot, phase: 'home', offset: ((i * 37) % 100) / 100 * 1.6 - 0.8 } };
       this.citizens.push(c);
@@ -821,7 +831,7 @@ export class TownScene extends Phaser.Scene {
     this.avatar = new Avatar<Selection>(this, {
       walkable: (gx, gy) => this.walkable(gx, gy),
       depthAt: (gx, gy, y) => this.avatarDepth(gx, gy, y),
-      places: () => this.places,
+      places: () => this.placesWithFolk(),
       onEnter: (sel) => this.cb.onSelect(sel),
       onNear: (label) => this.cb.onNear?.(label),
       start: { gx: ex.gx + 0.5, gy: ex.gy + 1.3 },
@@ -909,6 +919,44 @@ export class TownScene extends Phaser.Scene {
       }
     });
     this.places = out;
+  }
+
+  /** Doors, plus any townsperson close enough to talk to. */
+  private placesWithFolk(): Array<Place<Selection>> {
+    const g = this.avatar?.grid();
+    if (!g) return this.places;
+    const folk: Array<Place<Selection>> = [];
+    this.citizens.forEach((c, i) => {
+      if (c.sprite.alpha < 0.5) return;
+      const p = toGrid(c.sprite.x, c.sprite.y);
+      if (Math.abs(p.gx - g.gx) > 1.5 || Math.abs(p.gy - g.gy) > 1.5) return;
+      folk.push({ ...p, r: 1.1, label: `Talk to ${citizenProfile(i, CITY_ID).name.split(' ')[0]}`, select: { type: 'citizen', index: i } });
+    });
+    return folk.length ? [...folk, ...this.places] : this.places;
+  }
+
+  /** Stop a townsperson for a chat (or let them go with null). */
+  holdCitizen(i: number | null) {
+    const prev = this.talking;
+    this.talking = i;
+    this.talkBubble?.destroy();
+    this.talkBubble = undefined;
+    if (prev !== null && this.citizens[prev]) {
+      const c = this.citizens[prev];
+      c.wait = 0.6;
+      if (c.routine) c.routine.phase = 'reassigned'; // pick their routine back up
+    }
+    if (i !== null && this.citizens[i]) {
+      const c = this.citizens[i];
+      this.talkBubble = this.add.text(c.sprite.x + 10, c.sprite.y - 38, '💬', { fontSize: '16px' }).setOrigin(0.5, 1).setDepth(99650);
+    }
+  }
+
+  /** A citizen's picture for the conversation panel. */
+  portrait(i: number): string | null {
+    const c = this.citizens[i];
+    if (!c) return null;
+    try { return this.textures.getBase64(c.key, 'idle0'); } catch { return null; }
   }
 
   /** Walk with the keys and follow the avatar (on), or pan the camera freely (off). */
@@ -1608,6 +1656,17 @@ export class TownScene extends Phaser.Scene {
       npc.label?.setAlpha(cam.zoom > 0.7 && !this.cinematic && this.director.labels ? 0.92 : 0);
     }
     this.citizens.forEach((c, i) => {
+      if (i === this.talking) {
+        // In conversation: stand still, face the avatar, show a speech bubble.
+        this.play(c, 'idle');
+        const a = this.avatar?.sprite;
+        if (a) c.sprite.setFlipX(a.x < c.sprite.x);
+        c.sprite.setAlpha(1).setDepth(c.sprite.y);
+        // The bubble sits on the side away from you, clear of your name tag.
+        const side = a && a.x > c.sprite.x ? -14 : 14;
+        this.talkBubble?.setPosition(c.sprite.x + side, c.sprite.y - 30 + Math.sin(time / 250) * 2);
+        return;
+      }
       const r = c.routine;
       if (r) {
         const ph = this.phaseFor(hour, r.offset);

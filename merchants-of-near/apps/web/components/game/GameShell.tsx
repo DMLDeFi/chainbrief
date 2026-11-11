@@ -12,6 +12,7 @@ import { Joystick } from './Joystick';
 import { IconBag, IconChart, IconCrown, IconGear, IconHouse, IconMedal, IconPeople, IconScale, IconScroll, IconWallet, IconPlus, IconMinus, IconMap, IconEmpire, IconDice, IconHorse, IconWalk } from '../icons';
 import { TavernPanel } from './panels/TavernPanel';
 import { HippodromePanel } from './panels/HippodromePanel';
+import { TownsfolkPanel } from './panels/TownsfolkPanel';
 import { ContractsPanel } from './panels/ContractsPanel';
 import { GuildsPanel } from './panels/GuildsPanel';
 import { EmpirePanel } from './panels/EmpirePanel';
@@ -32,7 +33,7 @@ import { WalletPanel } from './panels/WalletPanel';
 import { SettingsPanel } from './panels/SettingsPanel';
 import { DemoGuide } from './DemoGuide';
 
-export type PanelId = 'world' | 'empire' | 'contracts' | 'guilds' | 'tavern' | 'hippodrome' | 'market' | 'inventory' | 'merchants' | 'business' | 'economy' | 'ledger' | 'leaderboard' | 'achievements' | 'wallet' | 'settings';
+export type PanelId = 'world' | 'empire' | 'contracts' | 'guilds' | 'tavern' | 'hippodrome' | 'townsfolk' | 'market' | 'inventory' | 'merchants' | 'business' | 'economy' | 'ledger' | 'leaderboard' | 'achievements' | 'wallet' | 'settings';
 
 const DOCK: Array<{ id: PanelId; label: string; icon: React.ReactNode; key: string }> = [
   { id: 'world', label: 'World Map', icon: <IconMap />, key: 'm' },
@@ -74,6 +75,7 @@ export function GameShell() {
   }, []);
   const [panel, setPanel] = useState<PanelId | null>((params.get('panel') as PanelId) ?? null);
   const [merchantId, setMerchantId] = useState<string | null>(null);
+  const [citizen, setCitizen] = useState<{ index: number; portrait: string | null } | null>(null);
   const [plotSel, setPlotSel] = useState<Selection | null>(null);
   const [demo, setDemo] = useState(params.get('demo') === '1');
   const town = useRef<TownHandle>(null);
@@ -135,10 +137,20 @@ export function GameShell() {
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
 
+  useEffect(() => {
+    if (panel !== 'townsfolk') town.current?.holdCitizen(null);
+  }, [panel]);
+
   const viewCityRef = useRef(viewCity);
   viewCityRef.current = viewCity;
   const onSelect = useCallback((s: Selection) => {
     if (s.type === 'place') { setPanel('tavern'); return; }
+    if (s.type === 'citizen') {
+      town.current?.holdCitizen(s.index);
+      setCitizen({ index: s.index, portrait: town.current?.portrait(s.index) ?? null });
+      setPanel('townsfolk');
+      return;
+    }
     if (s.type === 'merchant') {
       setMerchantId(s.id);
       setPanel('merchants');
@@ -234,6 +246,7 @@ export function GameShell() {
           {panel === 'world' && <WorldMap world={world} me={me} viewCity={marketCity} onClose={() => setPanel(null)} onVisit={(c) => { setMarketCity(c); setPanel('market'); }} onWalk={walk} />}
           {panel === 'empire' && <EmpirePanel world={world} me={me} onClose={() => setPanel(null)} />}
           {panel === 'contracts' && <ContractsPanel world={world} me={me} onClose={() => setPanel(null)} />}
+          {panel === 'townsfolk' && citizen && <TownsfolkPanel world={world} me={me} index={citizen.index} city={viewCity} portrait={citizen.portrait} onClose={() => setPanel(null)} />}
           {panel === 'tavern' && <TavernPanel me={me} onClose={() => setPanel(null)} />}
           {panel === 'hippodrome' && <HippodromePanel world={world} me={me} onClose={() => setPanel(null)} />}
           {panel === 'guilds' && <GuildsPanel world={world} me={me} onClose={() => setPanel(null)} />}
