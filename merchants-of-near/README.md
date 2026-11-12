@@ -15,6 +15,37 @@ Built for the NEAR Hackathon 2026.
 
 **Videos:** [How to Play (1:33)](https://github.com/DMLDeFi/chainbrief/blob/videos/5-how-to-play-1080p.mp4) · [New Features trailer](https://github.com/DMLDeFi/chainbrief/blob/videos/4-new-features-trailer-1080p.mp4) · [World Expansion trailer](https://github.com/DMLDeFi/chainbrief/blob/videos/3-world-expansion-trailer-1080p.mp4)
 
+## For judges
+
+**Track:** Games With Real Economies · **Built for NEAR HACKATHON (Nov 1–14, 2026)**
+
+**The problem.** Game economies are fake. Prices are hard-coded, shopkeepers don't think, and nothing you earn is really yours. **What we built:** a living market town where every price comes from real supply and demand, ten autonomous merchant agents trade against you with their own gold, goals and memory, and the businesses you build become deeds in your NEAR wallet that other players can buy for NEAR. When a deed sells on-chain, the business changes hands inside the game.
+
+### Try it in five minutes ([live link](https://merchants-of-near-game.vercel.app))
+
+| Do this | You should see |
+|---|---|
+| 1. Open the link, choose **Sign up**, pick a merchant name. | Nearhaven, your merchant (gold ring, name tag), and **The Merchant's Path** card at the top left. |
+| 2. Walk: WASD/arrows, tap the ground, or the joystick on a phone. Walk to the exchange in the town square and press **F**. | The camera follows you; a gold *Trade at Nearhaven Exchange* prompt; the Marketplace opens. |
+| 3. Buy 5 wheat. | Your gold drops, the wheat price ticks **up** (your order moved it), and Path step 1 shows ✓ with a **+10g** claim button. |
+| 4. Click any townsperson (or walk up and press **F**), ask *Any good deals?* | A real price gap between two cities, read from the live markets. |
+| 5. Press **3** and open any merchant. | An autonomous merchant's goals, inventory, P&L and a decision log of what it just did and why. |
+| 6. Press **J**, then **G**. | Delivery contracts posted by six cities; four guilds racing for the season. Join one. |
+| 7. Press **T** and roll the dice; press **H** and bet on a horse. | In-game gold games; stakes and winnings pass through a city treasury, so no gold is created. |
+| 8. Press **9** (NEAR Wallet) and connect a **testnet** wallet. | A NEP-413 signature links your NEAR account to your merchant. With a business, **Claim deed** mints it on-chain; listed deeds can be bought for NEAR. |
+
+The full on-chain loop (deploy, claim, list, buy, ownership follows) is already verified on testnet: see [Live testnet deployment](#live-testnet-deployment-reference).
+
+### NEAR technology used
+
+- **NEAR Connect** (`@hot-labs/near-connect`) for wallet login, with **NEP-413** signed messages to prove account ownership. The server never holds user keys.
+- **A Rust contract** (near-sdk 5.30) on testnet, `mon-game-0ebe9a.testnet`:
+  - **business deeds**, minted only with an ed25519 certificate from the game server's authority key;
+  - an **atomic deed marketplace** in NEAR (the buyer's deposit pays the seller in the same receipt, 2.5% fee);
+  - **soulbound achievement badges**;
+  - **NEP-297 events** for indexers.
+- **Chain → game sync:** the server follows on-chain deed ownership, so buying a deed transfers the business in the game.
+
 ![Architecture](docs/architecture.svg)
 
 ---
